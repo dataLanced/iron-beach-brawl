@@ -207,7 +207,10 @@ Promise.all([loadImg(ATLAS_SRC), loadImg(ENEMY_SRC), loadImg(SUIT_SRC), loadImg(
 });
 
 /* ---------- input ---------- */
-const keys = {}; let atkQueued = null;
+const keys = {}; let atkQueued = null, atkBuf = 0;
+// input buffer: a press is remembered for ATK_BUF seconds of game time (8 frames at 60 fps) and fires on the first
+// frame she's free to act - so a press made just before a hit-stun, landing or get-up ends still comes out
+const ATK_BUF = 8 / 60;
 const KEYMAP = { ArrowLeft: 'L', a: 'L', A: 'L', ArrowRight: 'R', d: 'R', D: 'R', ArrowUp: 'U', w: 'U', W: 'U', ArrowDown: 'D', s: 'D', S: 'D' };
 addEventListener('keydown', e => {
   if (versusKey(e)) return;
@@ -242,7 +245,7 @@ function pressAttack(kind) {
   audio.ensure();
   if (hero.state === 'held') { hero.escape += grabEscMul(hero); hero.shakeT = .12; return; }
   if (hero.state === 'dizzy') { shakeOffDizzy(.16); return; }
-  atkQueued = kind;
+  atkQueued = kind; atkBuf = ATK_BUF;
 }
 cv.addEventListener('pointerdown', ev => {
   cv.focus(); audio.ensure();
@@ -564,6 +567,7 @@ function heroGrabLock(h) {
 }
 function updateHero(dt) {
   const h = hero; h.st += dt;
+  if (atkQueued && !MOVES[h.state]) { atkBuf -= dt; if (atkBuf <= 0) atkQueued = null; }   // buffered press went stale
   if (h.state !== 'held') { h.preFace = h.face; h.preX = h.x; h.preDizzy = h.state === 'dizzy'; if (h.gInit || h.gLock) grabClear(h); }
   if (h.spin && h.state !== 'held') h.spin = 0;   // the player is only ever rotated while an enemy is carrying her
   if (h.shakeT > 0) h.shakeT -= dt;
@@ -587,7 +591,7 @@ function updateHero(dt) {
       game.fx.push({ k: 'tag', x: h.x, y: h.y - 175, t: 0, life: .8, txt: 'NICE LANDING!' }); atkQueued = null; return;
     }
     if (h.z <= 0 && h.st > .3) h.techOk = false;
-    atkQueued = null; h.vy = 0;
+    h.vy = 0;   // (a press here stays buffered for the get-up)
     if (h.z === 0) h.vx *= Math.pow(.02, dt);
     // a heavy slam (downHold) keeps her flat on the boards a while longer
     if (h.z === 0 && (isP3(h) && h.frames.down ? h.p3land != null && h.st - h.p3land > P3_UP + (h.downHold || 0) : h.st > 1.05 + (h.downHold || 0))) { h.rot = 0; h.downHold = 0; if (h.dizzyPending) startDizzy(h); else { setState(h, 'idle'); h.inv = Math.max(h.inv, 1); } }
@@ -596,7 +600,7 @@ function updateHero(dt) {
   if (h.state !== 'down') h.landDmg = 0;
   if (h.state === 'held') { h.vx = 0; h.vy = 0; atkQueued = null; heroGrabLock(h); return; }
   h.dizzyMeter = Math.max(0, (h.dizzyMeter || 0) - 9 * dt); if (h.dizzyImmune > 0) h.dizzyImmune -= dt;
-  if (h.state === 'hurt') { h.vy = 0; h.stun -= dt; if (h.stun <= 0) { if (h.dizzyPending) startDizzy(h); else setState(h, 'idle'); } atkQueued = null; return; }
+  if (h.state === 'hurt') { h.vy = 0; h.stun -= dt; if (h.stun <= 0) { if (h.dizzyPending) startDizzy(h); else setState(h, 'idle'); } return; }   // presses stay buffered for the recovery
   if (h.state === 'dizzy') {
     h.vx *= .8; h.vy = 0; atkQueued = null; h.dizzyT -= dt;
     if (h.dizzyT <= 0) { setState(h, 'idle'); h.dizzyImmune = 3; game.fx.push({ k: 'tag', x: h.x, y: h.y - 175, t: 0, life: .7, txt: 'RECOVERED!' }); }
@@ -5979,8 +5983,8 @@ function p2Update(h, dt) {
   h.p2ca = null;
   const S = h.state;
   if (S === 'jump' || S === 'apunch' || S === 'akick' || S === 'hammer') { p2Air(h, dt); return true; }
-  if (S === 'jland') { h.p2ca = 'jump'; h.p2cfi = 3; h.vx *= .7; h.vy = 0; atkQueued = null; jumpQueued = false; if (h.st > .13) setState(h, 'idle'); return true; }
-  if (S === 'hland') { h.p2ca = 'hammer'; h.p2cfi = h.st < .2 ? 3 : 4; h.vx = 0; h.vy = 0; atkQueued = null; jumpQueued = false; if (h.st > .42) setState(h, 'idle'); return true; }
+  if (S === 'jland') { h.p2ca = 'jump'; h.p2cfi = 3; h.vx *= .7; h.vy = 0; jumpQueued = false; if (h.st > .13) setState(h, 'idle'); return true; }
+  if (S === 'hland') { h.p2ca = 'hammer'; h.p2cfi = h.st < .2 ? 3 : 4; h.vx = 0; h.vy = 0; jumpQueued = false; if (h.st > .42) setState(h, 'idle'); return true; }
   if (P2_GRAB.includes(S)) { p2Grab(h, dt); return true; }
   if (MOVES[S]) { jumpQueued = false; return false; }
   // free movement
@@ -6279,7 +6283,7 @@ function p3Update(h, dt) {
   if (S === 'p3aslam') return p3AirSlam(h, dt);
   if (P3_GRABS.has(S)) return p3Grab(h, dt);
   if (S === 'p3jump') return p3Air(h, dt);
-  if (S === 'p3jland') { h.p3ca = 'jump'; h.p3cfi = 3; h.vx *= .6; h.vy = 0; atkQueued = null; jumpQueued = false; if (h.st > .13) setState(h, 'idle'); return true; }
+  if (S === 'p3jland') { h.p3ca = 'jump'; h.p3cfi = 3; h.vx *= .6; h.vy = 0; jumpQueued = false; if (h.st > .13) setState(h, 'idle'); return true; }
   if (MOVES[S]) { jumpQueued = false; return false; }
   if (jumpQueued && S === 'idle') {
     jumpQueued = false; const mx = (keys.R ? 1 : 0) - (keys.L ? 1 : 0);
@@ -10001,10 +10005,18 @@ function drawWatchEnd() {
 
 /* ---------- loop ---------- */
 let last = performance.now();
+// fixed timestep: the game always simulates in 1/60 s steps, whatever the screen's refresh rate (30, 60, 120 Hz), so
+// move timings, hit-stop, hit-stun and the input buffer mean the same thing on every device
+const STEP = 1 / 60; let acc = 0;
 function frame(now) {
-  const dt = Math.max(0, Math.min(.05, (now - last) / 1000)); last = now;
-  if (game.mode === 'title') game.cam = (game.cam + dt * 30) % 1600;
-  update(dt); render();
+  acc += Math.max(0, Math.min(.1, (now - last) / 1000)); last = now;
+  let n = 0;
+  while (acc >= STEP && n < 6) {
+    if (game.mode === 'title') game.cam = (game.cam + STEP * 30) % 1600;
+    update(STEP); acc -= STEP; n++;
+  }
+  if (n === 6) acc = 0;   // a long stall (tab hidden): drop the backlog instead of fast-forwarding
+  render();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
