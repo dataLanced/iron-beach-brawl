@@ -669,7 +669,7 @@ function grabTick(v) {
   if (v.gHp == null) v.gHp = v.hp;
   if (v.hp < v.gHp - .01) { v.gSq = (v.gSq || 0) + 1; v.gHp = v.hp; if (v.gSq >= 3 && !v.gLock) { v.gLock = 'LOCKED'; lockTag(v, 'LOCKED'); } }
 }
-const grabEscMul = v => v.gLock ? 0 : (GRAB_ESC_MUL[v.gSq || 0] ?? 0);
+const grabEscMul = v => v.gLock ? 0 : (GRAB_ESC_MUL[v.gSq || 0] ?? 0) * (v.escBoost || 1);   // escBoost: a master breaks holds faster
 function grabClear(v) { v.gLock = null; v.gSq = 0; v.gHp = null; v.gInit = false; }
 function updateEnemy(e, dt) {
   // only a body being held or thrown is ever rotated: anything else standing up is drawn upright
@@ -2420,7 +2420,7 @@ function recolorNinja(img, v, maskImg) {
 function makeNinja(x, y, face, extra) {
   const vk = (extra && extra.nv) || 'red', V = NJ_VAR[vk];
   if (vk === 'gold' && typeof GKFRAMES !== 'undefined' && GKFRAMES.idle) return makeFighter(Object.assign({
-    cls: 'ninja', variant: 'ninja_gold', nv: 'gold', rookie: true, sheet: 'gk_gold', frames: GKFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h, pixel: false,
+    cls: 'ninja', variant: 'ninja_gold', nv: 'gold', rookie: true, escBoost: 1.8, sheet: 'gk_gold', frames: GKFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h, pixel: false,
     dmgMul: V.dmg, tempo: V.tempo, x, y, face, hp: Math.round(CY.ninja.hp * V.hp), maxHp: Math.round(CY.ninja.hp * V.hp), speed: CY.ninja.speed * V.spd * .82,
     cd: .7 + Math.random() * .4, shcd: 1.5 + Math.random(), hopcd: 2 + Math.random() * 2, poise: 0, inv: 0,
     off: Math.random() * 70, offY: (Math.random() * 2 - 1) * 46, ca: 'idle', cfi: 0, flank: false,
@@ -3704,7 +3704,7 @@ function updateRookie(e, dt) {
   }
   // the walk-in grab: no lunge, no tell - she just walks (or runs) into an open player and she's caught
   e.wgcd = (e.wgcd == null ? 1.5 + Math.random() : e.wgcd) - dt;
-  const canWalkGrab = (rkRed(e) || (rkPurple(e) && e.frames.pclinch)) && !busy && e.wgcd <= 0;
+  const canWalkGrab = (rkRed(e) || (rkPurple(e) && (e.frames.pclinch || e.frames.gsub))) && !busy && e.wgcd <= 0;
   if (canWalkGrab && e.wgIntent == null) e.wgIntent = Math.random() < .5;   // this approach: walk in for the grab, or fight
   if (!canWalkGrab) e.wgIntent = null;
   const walkIn = canWalkGrab && e.wgIntent;
@@ -3713,7 +3713,11 @@ function updateRookie(e, dt) {
     e.wgcd = 1.4 + Math.random(); e.wgIntent = null;
     if (Math.random() < .8) {
       atkQueued = null; setState(hero, 'held'); hero.heldBy = e; hero.escape = 0; audio.grab(); game.shake = 5;
-      if (hero.face === e.face) rkIzuna(e);   // walked into her back: Izuna Drop
+      if (rkGold(e) && e.frames.gsub) {   // gold: walked into her back - the rear choke; from the front - the Izuna Drop
+        if (hero.face === e.face) { hero.preFace = -e.face; hero.preX = hero.x; hero.preDizzy = false; hero.escNeed = 9; hero.face = e.face; e.holding = hero; rkSet(e, 'gchoke'); e.squeezes = 0; e.holdFront = false; e.holding = hero; }
+        else rkIzuna(e);
+      }
+      else if (hero.face === e.face) rkIzuna(e);   // walked into her back: Izuna Drop
       else if (rkRed(e) && e.frames.tagc && Math.random() < .5) {   // red: half her walk-in grabs go into the Exploding Tag Clinch
         rkSet(e, 'rtagc'); e.holding = hero; hero.escNeed = 7; hero.face = -e.face; e.hits = 0;
         game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 180, t: 0, life: .9, txt: 'CLINCH!' });
@@ -3737,7 +3741,7 @@ function updateRookie(e, dt) {
       if ((behind && r < .6) || r < .14) { rkSet(e, 'rgrab'); e.hitDone = false; return; }
       if (rkGold(e) && e.gmcd <= 0 && r > .14) {
         // her heavy moves: the power string, the kick sequence, or the uppercut point blank
-        const q = Math.random(); e.gmcd = 1.2 + Math.random() * 1.2;
+        const q = Math.random(); e.gmcd = .7 + Math.random() * .8;
         rkGo(e, q < .32 ? RKG.string : q < .58 ? RKG.power : q < .84 ? RKG.kicks : RKG.dragon); return;
       }
       rkGo(e, rkList(e, r < .72 ? 'string' : 'lkick')); return;
@@ -3820,7 +3824,7 @@ function rkBallDraw(fx, sx) {
 // the parry: called from damage() before a hit lands on her
 const RK_RIPOSTE = [{ a: 'dagger', f: 1, ms: 240, abs: 1, hit: { dmg: 13, kb: 330, reach: 160, big: true, knock: true, launch: 340 }, slash: true }, { a: 'idle', f: 0, ms: 240, abs: 1 }];
 function rkCounter(t, hit, att) {
-  if (t && t.rookie && t.state === 'gsubst' && att === hero) { gkSubstitute(t); return true; }
+  if (t && t.rookie && t.state === 'gsubst' && att && att !== t && (att === hero || att.team == null || att.team !== t.team)) { gkSubstitute(t, att); return true; }
   if (!t || !t.rookie || t.state !== 'rcounter' || !att || att.face == null) return false;
   if (Math.sign(att.x - t.x) !== t.face) return false;           // only what comes from the front
   game.hitstop = .14; game.shake = Math.max(game.shake, 7); audio.thump(1400, .06, .35); audio.noise(.12, 5200, 'highpass', .3);
@@ -4149,7 +4153,7 @@ function drawGk(e) {
 }
 
 // GOLD: SUBSTITUTION - hit her in the stance and she's a log; she's already behind you
-function gkSubstitute(e) {
+function gkSubstitute(e, att) {
   game.hitstop = .08; audio.thump(180, .1, .35); audio.noise(.3, 1500, 'bandpass', .25);
   const f = e.frames.glog[0], lx = e.x, ly = e.y, face = e.face;
   rkSmoke(lx, ly, 1.1);
@@ -4160,8 +4164,8 @@ function gkSubstitute(e) {
     ctx.drawImage(sheets[e.sheet], f.x, f.y || 0, f.w, f.h, -f.ax, -f.ay, f.w, f.h); ctx.restore();
     if (tip >= 1 && !fx.thud) { fx.thud = true; audio.thump(110, .12, .3); dust(fx.x, fx.y, 4); } } });
   game.fx.push({ k: 'tag', x: lx, y: ly - 190, t: 0, life: 1, txt: 'SUBSTITUTION!' });
-  if (hero.state !== 'held' && hero.state !== 'ko') { setState(hero, 'idle'); hero.vx = 0; }
-  atkQueued = null;
+  if (att === hero && hero.state !== 'held' && hero.state !== 'ko') { setState(hero, 'idle'); hero.vx = 0; }
+  if (att === hero) atkQueued = null;
   rkSet(e, 'gswap'); e.hidden = true; e.inv = 99;
 }
 function gkChoke(e, dt) {
@@ -4174,9 +4178,10 @@ function gkChoke(e, dt) {
       e.x = Math.max(game.cam + 60, Math.min(game.cam + W - 60, hero.x - e.face * 46)); e.y = hero.y - .3;
       rkSmoke(e.x, e.y, .7); audio.noise(.2, 1800, 'bandpass', .18);
     }
-    e.ca = 'gsub'; e.cfi = 1;
-    if (t > .55) {
-      if (heroHittable() && hero.state !== 'held' && Math.abs(hero.x - e.x) < 120 && Math.abs(hero.y - e.y) < 30) {
+    e.ca = 'gsub'; e.cfi = 1; e.inv = 99;   // nothing touches her on the way out of the smoke
+    if (t > .47) {
+      e.inv = 0;
+      if (hero.state !== 'ko' && hero.state !== 'held' && hero.state !== 'down' && Math.abs(hero.x - e.x) < 130 && Math.abs(hero.y - e.y) < 34) {
         atkQueued = null; jumpQueued = false; hero.preFace = -e.face; hero.preX = hero.x; hero.preDizzy = false;   // her own rules: shakeable until she laughs (not a locked back grab)
         setState(hero, 'held'); hero.heldBy = e; hero.escape = 0; hero.escNeed = 9; hero.face = e.face; e.holding = hero;
         audio.grab(); game.shake = 6; rkSet(e, 'gchoke'); e.squeezes = 0; e.holdFront = false;
