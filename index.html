@@ -2432,13 +2432,13 @@ function recolorNinja(img, v, maskImg) {
 function makeNinja(x, y, face, extra) {
   const vk = (extra && extra.nv) || 'red', V = NJ_VAR[vk];
   if (vk === 'gold' && typeof GKFRAMES !== 'undefined' && GKFRAMES.idle) return makeFighter(Object.assign({
-    cls: 'ninja', variant: 'ninja_gold', nv: 'gold', rookie: true, escBoost: 1.8, sheet: 'gk_gold', frames: GKFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h, pixel: false,
+    cls: 'ninja', variant: 'ninja_gold', nv: 'gold', rookie: true, escBoost: 1.8, sheet: 'gk_gold', frames: GKFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h * .88, pixel: false,
     dmgMul: V.dmg, tempo: V.tempo, x, y, face, hp: Math.round(CY.ninja.hp * V.hp), maxHp: Math.round(CY.ninja.hp * V.hp), speed: CY.ninja.speed * V.spd * .82,
     cd: .7 + Math.random() * .4, shcd: 1.5 + Math.random(), hopcd: 2 + Math.random() * 2, poise: 0, inv: 0,
     off: Math.random() * 70, offY: (Math.random() * 2 - 1) * 46, ca: 'idle', cfi: 0, flank: false,
   }, extra || {}));
   if ((vk === 'purple' || vk === 'black') && typeof PKFRAMES !== 'undefined' && PKFRAMES.idle) return makeFighter(Object.assign({
-    cls: 'ninja', variant: 'ninja_' + vk, nv: vk, rookie: true, sheet: 'pk_' + vk, frames: PKFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h, pixel: false,
+    cls: 'ninja', variant: 'ninja_' + vk, nv: vk, rookie: true, sheet: 'pk_' + vk, frames: PKFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h * .9, pixel: false,
     dmgMul: V.dmg, tempo: V.tempo, x, y, face, hp: Math.round(CY.ninja.hp * V.hp), maxHp: Math.round(CY.ninja.hp * V.hp), speed: CY.ninja.speed * V.spd * .82,
     cd: .8 + Math.random() * .5, shcd: 1.5 + Math.random(), hopcd: 2 + Math.random() * 2, poise: 0, inv: 0,
     off: Math.random() * 70, offY: (Math.random() * 2 - 1) * 46, ca: 'idle', cfi: 0, flank: false,
