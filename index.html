@@ -10351,6 +10351,10 @@ function watchFoe(e) {
 function wBackUp(e) {
   e.vicState = null; e.heldBy = null; e.spin = 0; e.rot = 0; e.z = Math.max(0, e.z); e.vz = 0;
   setState(e, 'idle'); e.anim = 'idle';
+  // a knockdown from its own code (poise break: inv 99) that the other side then took over never reaches the fighter's
+  // own get-up, which is what clears that 99. Clear it here, or she gets up permanently untouchable.
+  if (e.inv > 50 && !e.posing) e.inv = .35;
+  e.launched = false; e.thudded = false;
   if (e.cls) { e.ca = 'idle'; e.cfi = 0; e.cd = Math.max(e.cd || 0, .5); }
   if (e.ai) e.ai.cd = Math.max(e.ai.cd || 0, .5);
 }
