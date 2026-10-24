@@ -9636,7 +9636,10 @@ function drawNpcGuard(e) {
    Fairness: when tokens are free they go to whoever has been waiting the longest (and is on screen and close).
    Exceptions: a whiffed big move right next to an enemy can be punished without a token (tokPunish).
    Rolled out to the Pier Punk first; other enemies opt in by calling tokWant / tokFree. */
-const TOK = { pool: 2, timeout: 3, debug: true };
+const TOK = { pool: 2, timeout: 3, rest: [.9, 1.5], debug: true };
+// how many tokens a side has: one, or two once the pack is big (4+)
+function tokPool(e) { return tokUsers(e).length >= 4 ? TOK.pool : 1; }
+const tokRest = {};   // per side: a returned token needs a breather before anyone can take it again
 function tokSide(e) { return game.watch ? e.team : 'enemy'; }
 function tokUsers(e) { const s = tokSide(e); return game.enemies.filter(o => o.tokUser && tokSide(o) === s && o.state !== 'ko' && !o.remove); }
 function tokHeld(e) { return tokUsers(e).reduce((n, o) => n + (o.tok || 0), 0); }
@@ -9646,19 +9649,28 @@ function tokWant(e, cost) {
   if (e.tokWantT == null) e.tokWantT = game.t;
   e.tokAsk = game.t; e.tokCost = cost;
   const onScreen = e.x > game.cam - 20 && e.x < game.cam + W + 20; if (!onScreen) return false;
-  if (tokHeld(e) - (e.tok || 0) + cost > TOK.pool) return false;
+  if (!e.tok && game.t < (tokRest[tokSide(e)] || 0)) return false;   // the last token back is still catching its breath
+  if (tokHeld(e) - (e.tok || 0) + cost > tokPool(e)) return false;
   // someone who has waited longer (and is still asking) goes first
-  const rival = tokUsers(e).some(o => o !== e && !o.tok && o.tokAsk > game.t - .25 && o.tokWantT < e.tokWantT && tokHeld(e) + (o.tokCost || 1) <= TOK.pool);
+  const rival = tokUsers(e).some(o => o !== e && !o.tok && o.tokAsk > game.t - .25 && o.tokWantT < e.tokWantT && tokHeld(e) + (o.tokCost || 1) <= tokPool(e));
   if (rival) return false;
-  e.tok = cost; e.tokGot = game.t; e.tokWantT = null; return true;
+  e.tok = cost; e.tokGot = game.t; e.tokWantT = null;
+  tokRest[tokSide(e)] = Math.max(tokRest[tokSide(e)] || 0, game.t + .45);   // a short gap before the next one is handed out, so two never start together
+  return true;
 }
-function tokFree(e) { e.tok = 0; e.tokWantT = null; }
+function tokFree(e) { if (e.tok) tokRest[tokSide(e)] = game.t + TOK.rest[0] + Math.random() * (TOK.rest[1] - TOK.rest[0]); e.tok = 0; e.tokWantT = null; }
 function tokTick(e) {
   if (e.tok && (game.t - e.tokGot > TOK.timeout || ['hurt', 'down', 'ko'].includes(e.state))) tokFree(e);
   if (!e.tok && e.tokAsk != null && game.t - e.tokAsk > .5) e.tokWantT = null;   // stopped asking
 }
 // the target just whiffed something big right in front of her: punish it, token or not
-function tokPunish(e, adx, ady) { return !!MOVES[hero.state] && hero.st > .12 && adx < 150 && ady < 24 && Math.random() < .5; }
+function tokPunish(e, adx, ady) {
+  // only a real whiff (deep into the swing, nothing landed), only if nobody on her side is already attacking, rarely
+  if (!MOVES[hero.state] || hero.st < .18 || hero.hitDone || adx > 140 || ady > 22) return false;
+  if (tokUsers(e).some(o => o.state === 'patk')) return false;
+  if (game.t < (e.punT || 0)) return false; e.punT = game.t + 4;
+  return Math.random() < .3;
+}
 function drawTok(e) {
   if (!TOK.debug || !e.tokUser || !e.tok || e.hidden || e.state === 'ko') return;
   const x = e.x - game.cam, y = e.y - 178 - (e.z || 0);
@@ -10165,7 +10177,7 @@ function makePunk(x, y, face, extra) {
   return makeFighter(Object.assign({
     cls: 'punk', variant: 'punk', sheet: 'punk', frames: PUFRAMES, scale: 160 / PUFRAMES.idle[0].h, ownDown: true, pixel: false, tokUser: true,
     x, y, face, hp: CY.punk.hp, maxHp: CY.punk.hp, speed: CY.punk.speed * (.9 + Math.random() * .2), poise: 0, inv: 0, rot: 0,
-    cd: .6 + Math.random() * .8, ca: 'idle', cfi: 0, tok: 0, slotR: 170 + Math.random() * 60, slotDy: (Math.random() - .5) * 70, wt: 0,
+    cd: .6 + Math.random() * .8, ca: 'idle', cfi: 0, tok: 0, slotR: 230 + Math.random() * 60, slotDy: (Math.random() - .5) * 70, wt: 0,
   }, extra || {}));
 }
 function puSet(e, s) { setState(e, s); e.ca = 'idle'; e.cfi = 0; e.vx = 0; e.vy = 0; e.rot = 0; e.tilt = 0; e.sqx = 0; e.sqy = 0; }
@@ -10187,7 +10199,7 @@ function puAtk(e, seq, cost) { puSet(e, 'patk'); e.seq = seq; e.si = 0; e.siT = 
 function puAtkUpd(e, dt) {
   e.siT += dt * 1000; let s = e.seq[e.si];
   while (s && e.siT >= s.ms) { e.siT -= s.ms; e.si++; s = e.seq[e.si]; if (s && s.gate && !e.landed) s = null; }
-  if (!s) { tokFree(e); puSet(e, 'idle'); e.cd = 1 + Math.random() * .8; e.backOff = .6; return; }
+  if (!s) { tokFree(e); puSet(e, 'idle'); e.cd = 1.6 + Math.random() * 1; e.backOff = 1; return; }
   e.ca = s.f[0]; e.cfi = s.f[1]; e.vx = e.face * (s.vx || 0); e.vy = 0; e.open = !!s.open;
   if (e.sIn !== e.si) {
     e.sIn = e.si; const f = e.frames[e.ca][e.cfi];
@@ -10253,21 +10265,29 @@ function updatePunk(e, dt) {
   }
   // where to stand: with a token, step in; without, a surround slot (sides split by who is where)
   let tx, ty;
-  if (e.tok || (e.cd <= 0 && !busy && tokHeld(e) < TOK.pool && e.backOff <= 0)) {
-    if (!e.tok) tokWant(e, 1);
+  // only the one holding a token comes in close; everyone else asks from her slot and stays there
+  if (!e.tok && e.cd <= 0 && !busy && e.backOff <= 0 && heroHittable()) tokWant(e, 1);
+  if (e.tok) {
     tx = hero.x - Math.sign(dx || 1) * 95; ty = hero.y;
   } else {
     let side = Math.sign(e.x - hero.x) || 1;
     const waiting = tokUsers(e).filter(o => o.state !== 'patk' && !o.tok), mine = waiting.filter(o => (Math.sign(o.x - hero.x) || 1) === side);
     const rank = mine.filter(o => Math.abs(o.x - hero.x) < Math.abs(e.x - hero.x)).length;
     if (rank >= 1 && mine.length - (waiting.length - mine.length) >= 2) side = -side;   // too many on one side: the back one flanks round
-    tx = hero.x + side * (e.slotR + rank * 70); ty = hero.y + [0, -40, 40][rank % 3] + e.slotDy * .3;
+    tx = hero.x + side * (e.slotR + rank * 80); ty = hero.y + [0, -40, 40][rank % 3] + e.slotDy * .3;
     if (e.backOff > 0) tx = hero.x + side * (e.slotR + 40);
     // menace: a little feint step now and then
     e.ftT = (e.ftT || 0) - dt; if (e.ftT <= 0) { e.ftT = 1.2 + Math.random() * 1.6; e.feint = Math.random() < .5 ? .25 : 0; }
     if (e.feint > 0) { e.feint -= dt; tx = hero.x + side * (e.slotR - 50); }
   }
   tx = Math.max(game.cam + 40, Math.min(game.cam + W - 40, tx));
+  // personal space: don't stand on top of another punk
+  for (const o of tokUsers(e)) {
+    if (o === e || o.state === 'down') continue; const ox = e.x - o.x, oy = e.y - o.y;
+    if (Math.abs(ox) < 70 && Math.abs(oy) < 30) { tx += (Math.sign(ox) || (e.slotR > o.slotR ? 1 : -1)) * 60; ty += (Math.sign(oy) || 1) * 25; }
+  }
+  // and nobody without a token loiters inside striking range
+  if (!e.tok && Math.abs(tx - hero.x) < 170) tx = hero.x + (Math.sign(tx - hero.x) || 1) * 170;
   const mx = tx - e.x, my = ty - e.y;
   e.vx = Math.abs(mx) > 10 ? Math.sign(mx) * e.speed : 0; e.vy = Math.abs(my) > 6 ? Math.sign(my) * e.speed * .6 : 0;
   if (e.vx || e.vy) {
