@@ -10382,7 +10382,7 @@ function updatePunk(e, dt) {
   if (!busy && e.cd <= 0 && heroHittable() && hero.state !== 'held') {
     if (e.pv === 'runner' && adx > 200 && adx < 340 && ady < 22 && e.spcd <= 0 && tokWant(e, 2)) { e.spcd = 3 + Math.random() * 2; puAtk(e, PU_SLIDE, 2); return; }
     if (e.pv === 'brawler' && adx > 140 && adx < 220 && ady < 22 && e.spcd <= 0 && Math.random() < .5 && tokWant(e, 2)) { e.spcd = 3.5 + Math.random() * 2; puAtk(e, PU_ELBOW, 2); return; }
-    if (e.pv === 'boss' && adx < 130 && ady < 20 && Math.random() < .5 && tokWant(e, 2)) { puAtk(e, PU_UPPER, 2); return; }
+    if (e.pv === 'boss' && adx < 135 && ady < 20 && (e.upT = (e.upT || 0) - 1) < 0 && tokWant(e, 1)) { e.upT = 0; if (Math.random() < .6) { puAtk(e, PU_UPPER, 1); return; } }   // her signature: one token, she's the boss
     if (e.pv === 'shiv' && adx < 140 && ady < 20 && tokWant(e, 1)) { puAtk(e, Math.random() < .7 ? PU_SLASH : puPick(), 1); return; }
     const hay = adx > 130 && adx < 210 && ady < 22 && Math.random() < .35;
     if (hay && tokWant(e, 2)) { puAtk(e, PU_HAY, 2); return; }
