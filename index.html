@@ -10284,7 +10284,7 @@ function stFinUpd(e, dt) {
   }
   if (ev === 'reap') { audio.whiff(); game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .6, txt: 'HAH!' }); }
   if (ev === 'down') {   // thrown down onto their back right in front of her
-    releaseHero(e); hero.x = e.x + e.face * (e.frames.fin[7].hx * e.scale + 14); hero.y = e.y + 1; hero.face = -e.face;   // right under where the fist will land
+    releaseHero(e); hero.x = e.x + e.face * (e.frames.fin[7].hx * e.scale - 45); hero.y = e.y + 1; hero.face = -e.face;   // right under where the fist will land
     const dmg = Math.round(6 * CY.satsuki.dmg); hero.hp -= dmg; hero.flash = .12;
     setState(hero, 'down'); hero.z = 0; hero.vz = 0; hero.vx = 0; hero.rot = 1; hero.downHold = 2.4;
     game.hitstop = .1; game.shake = Math.max(game.shake, 10); audio.thump(70, .25, .35); audio.hit(true); dust(hero.x, hero.y, 10);
@@ -10294,7 +10294,7 @@ function stFinUpd(e, dt) {
   if (ev === 'charge') { audio.noise(.5, 400, 'bandpass', .14); }
   if (ev === 'punch') {
     const f = e.frames.fin[7], px = e.x + e.face * f.hx * e.scale, dmg = Math.round(20 * CY.satsuki.dmg);
-    if (hero.state === 'down' || hero.state === 'ko') hero.x = px + e.face * 14;
+    if (hero.state === 'down' || hero.state === 'ko') hero.x = px - e.face * 45;   // her stomach right under the fist (a lying body is drawn behind its x)
     if (hero.state === 'down') {
       hero.hp -= dmg; hero.flash = .2; setState(hero, 'down'); hero.rot = 1; hero.z = .01; hero.vz = 230; hero.vx = 0; hero.downHold = 1.1;   // jolts up off the boards and slams back down
       game.fx.push({ k: 'num', x: hero.x, y: hero.y - 130, t: 0, life: .9, txt: dmg, foe: true });
