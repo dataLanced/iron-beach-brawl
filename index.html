@@ -5731,10 +5731,18 @@ function updateSchool(e, dt) {
     // crouch, spring, flying kick, landing
     e.ca = e.od ? 'jkick' : 'jump';
     if (!e.airborne && e.st < .17) { e.cfi = 0; e.vx = 0; e.vy = Math.sign(dy) * Math.min(100, ady * 5); return; }
-    if (!e.airborne && !e.landed) { e.airborne = true; e.vz = e.od ? (e.jkJuggle ? 600 : 520) : 470; e.vx = e.face * Math.min(e.od ? 620 : 470, Math.max(e.jkJuggle ? 120 : 260, (adx + (e.jkJuggle ? hero.vx * e.face * .5 - 40 : 0)) * (e.od ? 1.3 : 1.15))); e.vy = 0; audio.whiff(); if (e.od) game.fx.push({ k: 'powerring', x: e.x, y: e.y, t: 0, life: .35, col: '255,70,50' }); }
+    if (!e.airborne && !e.landed && !e.od && !e.jkJuggle && !e.jkType) { const r = Math.random(); e.jkType = r < .25 ? 'early' : r < .55 ? 'late' : r < .78 ? 'empty' : 'mid'; }
+    if (!e.airborne && !e.landed) { e.airborne = true; e.vz = e.od ? (e.jkJuggle ? 600 : 520) : 470; e.vx = e.face * Math.min(e.od ? 620 : 470, Math.max(e.jkJuggle ? 120 : 260, (adx + (e.jkJuggle ? hero.vx * e.face * .5 - 40 : 0) - (e.jkType === 'empty' ? 60 : e.jkType === 'late' ? -20 : 0)) * (e.od ? 1.3 : 1.15))); e.vy = 0; audio.whiff(); if (e.od) game.fx.push({ k: 'powerring', x: e.x, y: e.y, t: 0, life: .35, col: '255,70,50' }); }
     if (e.airborne) {
       const landed = cyGravity(e, dt);
-      e.cfi = e.od ? (e.vz > 140 ? 1 : 2) : (e.vz > 300 ? 1 : e.vz > 60 ? 2 : 3); const kicking = e.od ? e.cfi === 2 : e.cfi === 3;
+      e.cfi = e.od ? (e.vz > 140 ? 1 : 2) : (e.vz > 300 ? 1 : e.vz > 60 ? 2 : 3);
+      // base Mika mixes her jump up: kick early (beats a jump-in to meet her), kick late (deep, under an anti-air), or no kick at all
+      if (!e.od && e.jkType === 'early') e.cfi = e.vz > 330 ? 1 : 3;
+      if (!e.od && e.jkType === 'late') e.cfi = e.vz > 300 ? 1 : e.z > 55 ? 2 : 3;
+      if (!e.od && e.jkType === 'empty') e.cfi = e.vz > 300 ? 1 : 2;
+      const kicking = e.od ? e.cfi === 2 : e.cfi === 3;
+      if (!e.od && e.jkType === 'early' && kicking && !e.hitDone && heroAirborne() === false && hero.z > 20 && Math.abs(hero.x - e.x) < 120 && ady < 36 && Math.abs(hero.z - e.z) < 110 && heroHittable()) {
+        e.hitDone = true; cyHit(e, { dmg: 10, kb: 300, reach: 999, big: true, knock: true, launch: 260 }); }   // meets a jumper in the air
       if (e.jkJuggle) {
         // air-to-air: kick her while she's still up there
         if (kicking && !e.hitDone && heroAirborne() && Math.abs(hero.x - e.x) < 140 && ady < 40 && Math.abs(hero.z - e.z) < 130) { e.hitDone = true; sgJuggleHit(e, 9, 420, 260, null); }
@@ -5746,7 +5754,15 @@ function updateSchool(e, dt) {
       return;
     }
     e.cfi = e.od ? 3 : 4; e.vx *= .8;
-    if (e.ft > (e.jkJuggle || (e.od && heroAirborne()) ? 120 : 300)) { e.landed = false; e.hitDone = false; e.jkJuggle = false; sgSet(e, 'idle'); e.cd = .8; e.jkcd = 3 + Math.random() * 2.5; }
+    if (!e.od && e.jkType === 'empty' && e.ft > 70 && !e.mixDone) {   // the empty jump: lands right on you and goes straight into a grab or a jab
+      e.mixDone = true; const t = e.jkType; e.landed = false; e.hitDone = false; e.jkType = null; e.jkcd = 3 + Math.random() * 2.5;
+      if (adx < 110 && ady < 22 && heroHittable() && hero.state !== 'held') {
+        if (e.frames.grab && Math.random() < .55) { sgSet(e, 'grab'); e.hitDone = false; e.face = Math.sign(dx) || e.face; return; }
+        sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'jab'; e.face = Math.sign(dx) || e.face; return;
+      }
+      sgSet(e, 'idle'); e.cd = .4; return;
+    }
+    if (e.ft > (e.jkJuggle || (e.od && heroAirborne()) ? 120 : 300)) { e.landed = false; e.hitDone = false; e.jkJuggle = false; e.jkType = null; e.mixDone = false; sgSet(e, 'idle'); e.cd = .8; e.jkcd = 3 + Math.random() * 2.5; }
     return;
   }
   if (S === 'grab') {
@@ -5810,6 +5826,10 @@ function updateSchool(e, dt) {
     e.x = Math.max(game.cam + 40, Math.min(game.cam + W - 40, e.x));
     if (e.siT !== e.si) { e.siT = e.si; if (e.si === 0 || e.si === 2) dust(e.x - e.face * 20, e.y, 6); if (e.si === 1) { audio.noise(.18, 1600, 'bandpass', .25); game.fx.push({ k: 'dashlines', o: e, face: e.face, t: 0, life: .3 }); } }
     if ((e.si === 1 || e.si === 2) && (e.ghT = (e.ghT || 0) - dt) <= 0) { e.ghT = e.od ? .025 : .035; sgGhost(e); }
+    // fake-out: she brakes early, well short of you
+    if (!e.od && e.dPlan === 'fake' && e.si === 1 && adx < 220) { e.si = 2; e.ft = 0; }
+    if (e.si === 3 && e.ft >= T[3] && !e.od && e.dPlan === 'grab' && !game.demo && adx < 130 && ady < 20 && heroHittable() && hero.state !== 'held') { e.dPlan = null; e.face = Math.sign(dx) || e.face; sgSet(e, 'grab'); e.hitDone = false; return; }
+    if (e.si === 3 && e.ft >= T[3] && !e.od && e.dPlan === 'fake') { e.dPlan = null; sgSet(e, 'idle'); e.cd = .2; e.baitT = .9; return; }
     if (e.si === 3 && e.ft >= T[3]) {
       if (!game.demo && adx < 125 && ady < 20 && heroHittable() && hero.state !== 'held') { if (e.od) { e.face = Math.sign(dx) || e.face; sgOdString(e, Math.random() < .5 ? 's1' : 's3'); } else { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.face = Math.sign(dx) || e.face; if (Math.random() < .4) e.pk = 'k'; } }
       else { sgSet(e, 'idle'); e.cd = .25; }
@@ -5880,12 +5900,14 @@ function updateSchool(e, dt) {
     }
   }
   if (!e.od && !busy) {
+    e.baitT = (e.baitT || 0) - dt;
+    if (e.baitT > 0 && MOVES[hero.state] && adx < 260 && ady < 22) { e.baitT = 0; sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'str'; e.face = Math.sign(dx) || e.face; game.fx.push({ k: 'tag', x: e.x, y: e.y - 190, t: 0, life: .6, txt: 'BAITED!' }); return; }
     // someone jumping in on her: the high kick swats them
     if (e.hkcd <= 0 && hero.z > 30 && adx < 150 && ady < 26) { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'hk'; e.face = Math.sign(dx) || e.face; e.hkcd = 2.5; return; }
     // hop away from an attack about to land
     if (e.jmpcd <= 0 && MOVES[hero.state] && adx < 150 && ady < 30 && hero.face === -Math.sign(dx) && Math.random() < dt * 1.6) { sgSet(e, 'jump'); e.jdir = -(Math.sign(dx) || e.face); e.face = Math.sign(dx) || e.face; e.airborne = false; e.landed = false; return; }
     // dash in from mid range
-    if (e.dashcd <= 0 && e.cd <= .3 && adx > 230 && adx < 470 && ady < 24 && Math.random() < dt * 1.3) { sgSet(e, 'dash'); e.si = 0; e.siT = -1; e.face = Math.sign(dx) || e.face; e.dashcd = 3 + Math.random() * 2.5; return; }
+    if (e.dashcd <= 0 && e.cd <= .3 && adx > 230 && adx < 470 && ady < 24 && Math.random() < dt * 1.3) { sgSet(e, 'dash'); e.si = 0; e.siT = -1; { const r = Math.random(); e.dPlan = r < .45 ? 'string' : r < .75 && e.frames.grab ? 'grab' : 'fake'; } e.face = Math.sign(dx) || e.face; e.dashcd = 3 + Math.random() * 2.5; return; }
     // the high kick from just outside punch range
     if (e.hkcd <= 0 && e.cd <= 0 && adx > 105 && adx < 165 && ady < 20 && Math.random() < dt * 1.2) { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'hk'; e.face = Math.sign(dx) || e.face; e.hkcd = 3 + Math.random() * 2; return; }
   }
@@ -5900,7 +5922,7 @@ function updateSchool(e, dt) {
   }
   if (!busy) {
     const nobodyJumping = !game.enemies.some(o => o !== e && o.state === 'jkick');
-    if ((e.frames.jkick || e.frames.jump) && e.jkcd <= 0 && e.cd <= .3 && adx > 170 && adx < (e.od ? 440 : 340) && ady < 30 && nobodyJumping) { sgSet(e, 'jkick'); e.airborne = false; e.landed = false; e.hitDone = false; return; }
+    if ((e.frames.jkick || e.frames.jump) && e.jkcd <= 0 && e.cd <= .3 && adx > 170 && adx < (e.od ? 440 : 340) && ady < 30 && nobodyJumping && (e.od || Math.random() < dt * 2.5)) { sgSet(e, 'jkick'); e.airborne = false; e.landed = false; e.hitDone = false; e.jkType = null; e.mixDone = false; return; }
     if (e.cd <= 0 && adx < 100 && ady < 20) {
       const r = Math.random();
       if (e.od && e.frames.grab1 && e.grabcd <= 0 && (r < .35 || hero.state === 'dizzy')) {
