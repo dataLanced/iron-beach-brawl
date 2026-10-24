@@ -10250,7 +10250,8 @@ function stWin2Upd(e, dt) {
 // PALM: a coiled step, then a palm strike that blasts them away along the boards in the direction she faces.
 // SLAM: a leg-reap takedown onto their back, she kneels over them, the fist charges... and the ground punch.
 const ST_PALM = [['fin', 3, 140], ['fin', 1, 380, 'palm'], ['fin', 2, 300], ['fin', 3, 240]];
-const ST_SLAM = [['fin', 4, 200, 'reap'], ['fin', 5, 220, 'down'], ['fin', 6, 520, 'charge'], ['fin', 7, 120, 'punch'], ['fin', 8, 520], ['fin', 9, 260]];
+const ST_SLAM = [['clinch', 1, 200, 'reap'],   // (sheet box 5 is missing her front leg, so the yank uses her clinch grip frame)
+  ['fin', 5, 220, 'down'], ['fin', 6, 520, 'charge'], ['fin', 7, 120, 'punch'], ['fin', 8, 520], ['fin', 9, 260]];
 function stFinUpd(e, dt) {
   const seq = e.gph === 'palm' ? ST_PALM : ST_SLAM, t = e.gt * 1000;
   let i = 0, acc = 0; while (i < seq.length && t >= acc + seq[i][2]) { acc += seq[i][2]; i++; }
