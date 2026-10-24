@@ -170,6 +170,8 @@ let loadFail = false;
 let loadTotal = 0, loadDone = 0;
 function loadImg(src) {
   loadTotal++;
+  // inside a published artifact, file requests must carry the page's access pass (?__frame_t=...), or they get a 403
+  if (!src.startsWith('data:') && location.search.includes('__frame_t')) { const [p, q] = src.split('?'); src = p + location.search + (q ? '&' + q : ''); }
   return new Promise(res => {
     const go = n => {
       const i = new Image();
