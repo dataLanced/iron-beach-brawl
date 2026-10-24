@@ -5829,6 +5829,7 @@ function updateSchool(e, dt) {
     // fake-out: she brakes early, well short of you
     if (!e.od && e.dPlan === 'fake' && e.si === 1 && adx < 220) { e.si = 2; e.ft = 0; }
     if (e.si === 3 && e.ft >= T[3] && !e.od && e.dPlan === 'grab' && !game.demo && adx < 130 && ady < 20 && heroHittable() && hero.state !== 'held') { e.dPlan = null; e.face = Math.sign(dx) || e.face; sgSet(e, 'grab'); e.hitDone = false; return; }
+    if (e.si === 3 && e.ft >= T[3] && !e.od && e.dPlan === 'close') { e.dPlan = null; sgSet(e, 'idle'); e.cd = Math.min(e.cd, .3); return; }
     if (e.si === 3 && e.ft >= T[3] && !e.od && e.dPlan === 'fake') { e.dPlan = null; sgSet(e, 'idle'); e.cd = .2; e.baitT = .9; return; }
     if (e.si === 3 && e.ft >= T[3]) {
       if (!game.demo && adx < 125 && ady < 20 && heroHittable() && hero.state !== 'held') { if (e.od) { e.face = Math.sign(dx) || e.face; sgOdString(e, Math.random() < .5 ? 's1' : 's3'); } else { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.face = Math.sign(dx) || e.face; if (Math.random() < .4) e.pk = 'k'; } }
@@ -5946,6 +5947,12 @@ function updateSchool(e, dt) {
     // base: the power straight from just outside jab range, or onto someone stuck recovering
     if (!e.od && e.cd <= 0 && (e.strcd || 0) <= 0 && adx >= 100 && adx < 175 && ady < 20 && hero.state !== 'block'
         && (hero.state === 'hurt' || Math.random() < dt * 1.6)) { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'str'; e.face = Math.sign(dx) || e.face; e.strcd = 2.5 + Math.random() * 2; return; }
+  }
+  // getting there: when she's far off in her lane she dashes to close the gap instead of trudging over (a plain
+  // gap-closer, short cooldown; the attacking dash keeps its own longer one)
+  e.mvdcd = (e.mvdcd || 0) - tdt;
+  if (!e.od && e.frames.dash && e.mvdcd <= 0 && e.state === 'idle' && adx > 330 && ady < 30 && !(hero.state === 'ko')) {
+    sgSet(e, 'dash'); e.si = 0; e.siT = -1; e.face = Math.sign(dx) || e.face; e.dPlan = 'close'; e.mvdcd = .9 + Math.random() * .6; return;
   }
   const close = e.cd < .6 && !busy;
   const side = Math.sign(e.x - hero.x) || 1;
