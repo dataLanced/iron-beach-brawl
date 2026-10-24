@@ -9314,7 +9314,7 @@ CY.hoppy = { hp: 140, speed: 150, guard: 0, poise: 30, dmg: 1.05, height: 150, s
 VARIANT_HEX.hoppy = '#ff8fb8';
 function makeHoppy(x, y, face, extra) {
   return makeFighter(Object.assign({
-    cls: 'hoppy', variant: 'hoppy', sheet: 'hoppy', frames: HPFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h, ownDown: true, pixel: false,
+    cls: 'hoppy', variant: 'hoppy', sheet: 'hoppy', frames: HPFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h * .92, ownDown: true, pixel: false,
     x, y, face, hp: CY.hoppy.hp, maxHp: CY.hoppy.hp, speed: CY.hoppy.speed, poise: 0, inv: 0, rot: 0,
     cd: .8 + Math.random() * .5, aacd: 1.5, dkcd: 2 + Math.random() * 2, off: 96 + Math.random() * 16, ca: 'idle', cfi: 0,
   }, extra || {}));
@@ -9549,7 +9549,7 @@ CY.satsuki = { hp: 150, speed: 150, guard: 0, poise: 34, dmg: 1.05, height: 150,
 VARIANT_HEX.satsuki = '#ff9cc2';
 function makeSatsuki(x, y, face, extra) {
   return makeFighter(Object.assign({
-    cls: 'satsuki', variant: 'satsuki', sheet: 'satsuki', frames: STFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h, ownDown: true, pixel: false,
+    cls: 'satsuki', variant: 'satsuki', sheet: 'satsuki', frames: STFRAMES, scale: CY.ninja.height * 1.04 / RKFRAMES.idle[0].h * .84, ownDown: true, pixel: false,
     x, y, face, hp: CY.satsuki.hp, maxHp: CY.satsuki.hp, speed: CY.satsuki.speed, poise: 0, inv: 0, rot: 0,
     cd: .8 + Math.random() * .5, hycd: 1.5 + Math.random(), off: 100 + Math.random() * 20, ca: 'idle', cfi: 0,
   }, extra || {}));
