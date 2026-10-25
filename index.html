@@ -8739,6 +8739,19 @@ function updateBobbie(e, dt) {
   if (e.wantGrab && hero.state !== 'held' && hero.state !== 'down' && hero.z < 4 && heroHittable() && Math.abs(dx) < 80 && Math.abs(dy) < 14) { e.face = Math.sign(dx) || e.face; e.wantGrab = null; bbCatch(e); return; }
   if (e.wantGrab && e.grabcd < -5) { e.wantGrab = null; e.grabcd = 2; }
   e.vx = Math.abs(dx) > want + 10 ? Math.sign(dx) * e.speed : Math.abs(dx) < want - 25 ? -Math.sign(dx) * e.speed * .6 : 0;
+  // the punish rush: once they're dizzy (or about to get up dizzy), she sprints straight in instead of strolling over,
+  // and arrives in time to cash it in (a grab, or the lightning kicks into the palm)
+  const dizzyNow = hero.state === 'dizzy', dizzySoon = hero.state === 'down' && hero.dizzyPending;
+  if (BB_RUSH && (dizzyNow || dizzySoon) && Math.abs(dx) > 70) {
+    const goal = dizzySoon ? 75 : 50; e.vx = Math.abs(dx) > goal ? Math.sign(dx) * e.speed * 3.4 : 0; e.vy = Math.abs(dy) > 6 ? Math.sign(dy) * e.speed * 1.4 : 0;
+    if (Math.random() < dt * 25) game.fx.push({ k: 'dust', x: e.x - e.face * 18, y: e.y - 2, vx: -e.face * 60, t: 0, life: .3, r: 6 });
+    walkFrame(); return;
+  }
+  if (BB_RUSH && dizzyNow && Math.abs(dx) <= 110 && Math.abs(dy) < 18 && e.cd <= .5) {
+    e.face = Math.sign(dx) || e.face;
+    if (Math.random() < .5 && heroHittable()) { e.wantGrab = null; bbCatch(e); return; }
+    if (e.kkcd <= 1.5) { bbStartKicks(e); return; }
+  }
   e.vy = Math.abs(dy) > 6 ? Math.sign(dy) * e.speed * .55 : 0;
   walkFrame();
   e.cd -= dt; e.medcd -= dt; e.upcd -= dt; e.kkcd -= dt; e.pmcd -= dt; e.jmpcd -= dt; e.jkcd -= dt; e.stcd -= dt; e.swcd -= dt;
@@ -8918,6 +8931,7 @@ function bbSweep(e, dt) {
 }
 // palm blast: chamber .2s (frame 1), step in and thrust (frame 2) - the orb leaves her palm and bursts ~110px ahead
 // (live .04-.22s into the thrust), hold .3s, recover (frame 3) .28s
+var BB_RUSH = true;
 const BB_PM = { chamber: .2, thrust: .32, rec: .28, dmg: 22 };
 // ki levels from meditation: 0 blue (base), 1 gold, 2 violet. Bigger orb, more damage, shorter cooldown, longer reach;
 // level 2 launches them for a juggle. A knockdown costs her one level.
@@ -8930,7 +8944,7 @@ BB_BOX.palm1 = { x0: 52, x1: 192, y0: 52, y1: 138 };
 BB_BOX.palm2 = { x0: 52, x1: 228, y0: 46, y1: 144 };
 BB_BOX.palmOnly = { x0: 36, x1: 76, y0: 74, y1: 112 };   // just her palm, no orb
 function bbStartPalm(e, combo, plain) {
-  bbSet(e, 'palm'); e.pmCh = combo ? .08 : BB_PM.chamber; /* as a combo ender she fires it straight off the jab */ e.face = Math.sign(hero.x - e.x) || e.face; e.pmPlain = !!plain; if (!plain) { const K = BB_KI[e.kiLv || 0]; e.pmcd = K.cd[0] + Math.random() * K.cd[1]; } e.pmFired = false; e.pmHit = false;
+  bbSet(e, 'palm'); e.pmCh = combo ? .08 : BB_PM.chamber; /* as a combo ender she fires it straight off the jab */ e.face = Math.sign(hero.x - e.x) || e.face; e.pmPlain = !!plain; if (!plain) { const K = BB_KI[e.kiLv || 0]; e.pmcd = K.cd[0] + Math.random() * K.cd[1]; } e.pmFired = false; e.pmHit = false; if (!combo) e.pbSpend = false;
   audio.noise(.25, 700, 'bandpass', .2);
 }
 function bbPalm(e, dt) {
@@ -8963,6 +8977,7 @@ function bbPalm(e, dt) {
       if (boxHits(e, bx, hero) && (jug ? (damage(hero, hit, e), true) : cyHit(e, hit))) {
         e.pmHit = true; e.atkBox.hit = true; game.shake = Math.max(game.shake, 14 + lv * 4); game.hitstop = Math.max(game.hitstop, .06 + lv * .04);
         if (lv === 2) hero.juggleOk = true;
+        if (e.pbSpend) { e.pbSpend = false; e.kiLv = Math.max(0, lv - 1); }   // the point-blank release burns a ki level
         game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 195, t: 0, life: .9, txt: K.tag });
       }
     }
@@ -8970,7 +8985,7 @@ function bbPalm(e, dt) {
   }
   e.vx = 0;
   if (tt < P.thrust + P.rec) { e.ca = 'palm'; e.cfi = 2; return; }
-  bbSet(e, 'idle'); e.cd = .7 + Math.random() * .5;
+  e.pbSpend = false; bbSet(e, 'idle'); e.cd = .7 + Math.random() * .5;
 }
 // lightning kicks: a short set .1s, the flurry .72s (frames swap every .05s; a hit every .09s while her legs reach
 // them), the last kick knocks them away, then she sets her foot down .25s
@@ -9164,7 +9179,8 @@ function bbCatch(e) {
   if (!hero.__real) atkQueued = null;
   setState(hero, 'held'); hero.heldBy = e; hero.escape = 0; hero.escNeed = CY.bobbie.escape; hero.face = -e.face;
   bbSet(e, 'hold'); e.holding = hero; e.slamT = null; e.lifted = false; e.grabcd = 5 + Math.random() * 2;
-  e.gMove = e.kkcd <= 0 && Math.random() < .35 ? 'kicks' : 'throw';
+  const r_ = Math.random();
+  e.gMove = (e.kiLv || 0) >= 1 && e.pmcd <= .6 && r_ < .45 ? 'palm' : e.kkcd <= 0 && r_ < .7 ? 'kicks' : 'throw';
   audio.grab(); game.shake = Math.max(game.shake, 5);
   game.fx.push({ k: 'tag', x: e.x, y: e.y - 190, t: 0, life: .7, txt: 'GRABBED!' });
 }
@@ -9185,6 +9201,12 @@ function bbHold(e, dt) {
     // shove them off a step and light them up
     releaseHero(e); setState(hero, 'hurt'); hero.stun = .5; hero.vx = e.face * 90; hero.x = e.x + e.face * 70 * e.scale;
     audio.noise(.08, 1200, 'bandpass', .25); bbStartKicks(e); e.st = BB_KK.set * .5; return;
+  }
+  if (e.gMove === 'palm') {
+    // charged up: she holds them in place with a short shove and fires the orb point blank into their stomach
+    releaseHero(e); setState(hero, 'hurt'); hero.stun = .6; hero.vx = 0; hero.x = e.x + e.face * 62 * e.scale;
+    game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .8, txt: 'POINT BLANK!' });
+    bbStartPalm(e, true, false); e.pmCh = .14; e.pbSpend = true; return;
   }
   hero.escNeed = Infinity;
   const t1 = S.hold + S.load, t2 = t1 + S.flip;
