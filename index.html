@@ -1455,6 +1455,7 @@ function drawFighter(f) {
   ctx.save(); spriteTransform(f, sx, sy);
   if (f.drain > 0) { f.drain -= 1 / 60; ctx.filter = `grayscale(${Math.min(1, f.drain)}) brightness(${1 - .2 * Math.min(1, f.drain)})`; }
   if (f.pixel) ctx.imageSmoothingEnabled = false;
+  if (f.alpha != null && f.alpha < 1) { ctx.globalAlpha = f.alpha; ctx.filter = 'brightness(1.6) saturate(.4)'; }
   ctx.drawImage(sheets[f.sheet], fx, fr.y || 0, fw, fr.h, -fr.ax, -fr.ay, fw, fr.h);
   if (f.beamT != null && f.frames.beam) drawFireBeam(f);
   if (f.ebT != null && f.od) drawEnergyBeam(f);
@@ -2334,7 +2335,7 @@ function cyberDamaged(t, hit, att) {
     return;
   }
   if (C.boss && !t.enraged && !t.pendingEnrage && t.hp < t.maxHp / 2) t.pendingEnrage = true;
-  if (t.poise >= C.poise || (hit.big && t.state === 'leap')) {
+  if (t.poise >= (t.poiseMax || C.poise) || (hit.big && t.state === 'leap')) {
     t.poise = 0; t.airborne = false; t.z = 0; t.vz = 0; setState(t, 'down'); t.inv = 99; t.vx = att.face * 280;
   } else { setState(t, 'hurt'); t.stun = (hit.big ? .38 : .24) * (C.boss ? .85 : 1); }
 }
@@ -11017,12 +11018,12 @@ function makePunkGang(x, y, f, o) {
    on you - with nobody free she suplexes you instead; GROUND AND POUND on anyone who stays down; an arm-lock takedown. */
 Object.assign(CY.drone, { hp: 95, speed: 140, guard: .22, poise: 40, dmg: .75, height: 158, score: 900, escape: 7 });
 function makeDrone(variant, x, y, face, extra) {
-  return makeFighter(Object.assign({
+  return drRoleInit(makeFighter(Object.assign({
     cls: 'drone', variant, sheet: 'dr_' + variant, frames: DRFRAMES, scale: CY.drone.height / DRFRAMES.idle[0].h, pixel: false, ownDown: true, tokUser: true,
     x, y, face, hp: CY.drone.hp, maxHp: CY.drone.hp, speed: CY.drone.speed, cd: 1 + Math.random() * .6, scd: 3, poise: 0, inv: 0, z: 0,
     dashcd: 1.5 + Math.random() * 2, divecd: 3 + Math.random() * 3, grabcd: 3 + Math.random() * 3, pulsecd: 2, gnpcd: 0, guardcd: .5,
     off: Math.random() * 40, offY: (Math.random() * 2 - 1) * 40, ca: 'idle', cfi: 0, slot: Math.random() < .5 ? -1 : 1,
-  }, extra || {}));
+  }, extra || {})));
 }
 // strings: r = row, f = frame, ms; hit lands on the step's first frame; zap = a shock-gauntlet punch
 const DR = {
@@ -11035,14 +11036,17 @@ const DR = {
   // shock uppercut: crouch and charge the gauntlet, then drive straight up off planted feet - a launcher
   upper: [{ r: 'upper', f: 0, ms: 300, charge: 1 }, { r: 'upper', f: 1, ms: 320, lunge: 70, shock: 1, hit: { dmg: 13, kb: 110, reach: 118, big: true, knock: true, launch: 720, juggle: true, stop: .15 } },
           { r: 'upper', f: 2, ms: 280 }],
+  // blue's counter off a block: straight into the spinning backfist
+  counter: [{ r: 'backfist', f: 1, ms: 80, lunge: 120 }, { r: 'backfist', f: 2, ms: 300, lunge: 90, hit: { dmg: 12, kb: 400, reach: 134, big: true, knock: true } }],
   sweep: [{ r: 'sweep', f: 0, ms: 320, hit: { dmg: 9, kb: 160, reach: 140, low: true, big: true, knock: true } }, { r: 'sweep', f: 1, ms: 240 }],
 };
 function drSet(e, s) { setState(e, s); e.ca = 'idle'; e.cfi = 0; e.vx = 0; e.vy = 0; e.rot = 0; e.tilt = 0; e.holdFront = false; }
 function drEnd(e, cd) { tokFree(e); drSet(e, 'idle'); e.cd = cd; }
-function drZap(x, y, z) {   // a crackle of purple lightning
-  game.fx.push({ k: 'drzap', x, y, z, t: 0, life: .22, seed: Math.random() * 99, draw(fx, sx) {
+function drZap(x, y, z, col) {   // a crackle of lightning in her squad colour
+  col = col || (DR_CUR && DR_CUR.zcol) || '210,150,255';
+  game.fx.push({ k: 'drzap', x, y, z, col, t: 0, life: .22, seed: Math.random() * 99, draw(fx, sx) {
     let r = fx.seed; const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280, q = fx.t / fx.life;
-    ctx.save(); ctx.strokeStyle = `rgba(210,150,255,${1 - q})`; ctx.lineWidth = 2; ctx.shadowColor = '#b06cff'; ctx.shadowBlur = 8;
+    ctx.save(); ctx.strokeStyle = `rgba(${fx.col},${1 - q})`; ctx.lineWidth = 2; ctx.shadowColor = `rgb(${fx.col})`; ctx.shadowBlur = 8;
     for (let k = 0; k < 4; k++) { let x = sx, y = fx.y - fx.z; ctx.beginPath(); ctx.moveTo(x, y); for (let i = 0; i < 4; i++) { x += (rnd() - .5) * 34; y += (rnd() - .5) * 34; ctx.lineTo(x, y); } ctx.stroke(); }
     ctx.restore(); } });
 }
@@ -11082,7 +11086,7 @@ function drSeqUpd(e, dt) {
         game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 210, t: 0, life: .9, txt: 'SHOCK UPPERCUT!' });
       } else audio.whiff();
     } else if (step.hit) {
-      const hit = Object.assign({}, step.hit), zap = step.zap && Math.random() < .3;
+      const hit = Object.assign({}, step.hit), zap = step.zap && Math.random() < (e.zapP || .3);
       if (zap) hit.stun = .6;
       if (cyHit(e, hit)) { if (zap) { drZap(hero.x, hero.y, 95); audio.noise(.12, 3000, 'highpass', .25); game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 190, t: 0, life: .6, txt: 'SHOCK!' }); } }
       else audio.whiff();
@@ -11101,7 +11105,7 @@ function drSeqUpd(e, dt) {
 function drHoldStart(e, solo) {
   if (!hero.__real) atkQueued = null;
   setState(hero, 'held'); hero.heldBy = e; hero.escape = 0; hero.escNeed = solo ? Infinity : CY.drone.escape; hero.face = e.face;
-  drSet(e, 'hold'); e.holding = hero; e.hPh = solo ? 'snatch' : 'nelson'; e.grabcd = 7 + Math.random() * 3;
+  drSet(e, 'hold'); e.holding = hero; e.hPh = solo ? 'snatch' : 'nelson'; e.chained = false; e.grabcd = 7 + Math.random() * 3;
   if (!solo) game.drHold = e;
   audio.grab(); game.shake = Math.max(game.shake, 5);
   if (!solo) game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .8, txt: 'SQUAD HOLD!' });
@@ -11135,6 +11139,11 @@ function drHoldUpd(e, dt) {
   if (t < .2) { e.ca = 'hold'; e.cfi = 2; const k = t / .2; hero.x = e.x + e.face * (30 - 20 * k) * e.scale; hero.z = 10 + 70 * k; hero.spin = -hero.face * 1.2 * k; return; }
   if (t < .38) { e.ca = 'hold'; e.cfi = 3; const k = (t - .2) / .18; hero.x = e.x + e.face * (10 - 120 * k) * e.scale; hero.z = 80 * (1 - k); hero.spin = -hero.face * (1.2 + 1.9 * k); return; }
   e.ca = 'hold'; e.cfi = 3;
+  if (e.role === 'blonde' && !e.chained && hero.hp > 22) {   // the grappler keeps the lock and rolls through into a second one
+    e.chained = true; hero.hp -= 12; hero.flash = .15; game.hitstop = .1; game.shake = 14; audio.hit(true); audio.thump(55, .3, .5); dust(hero.x, hero.y, 8);
+    game.fx.push({ k: 'num', x: hero.x, y: hero.y - 120, t: 0, life: .8, txt: 12, foe: true }, { k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .9, txt: 'AND AGAIN!' });
+    e.face = -e.face; hero.face = e.face; hero.x = e.x + e.face * 30 * e.scale; hero.z = 10; hero.spin = 0; e.st = 0; return;
+  }
   releaseHero(e); hero.x = e.x - e.face * 95 * e.scale; hero.y = e.y + .5; hero.z = 0;
   hero.hp -= 16; hero.flash = .15; game.hitstop = .14; game.shake = 18; audio.hit(true); audio.thump(50, .4, .6); dust(hero.x, hero.y, 10);
   game.fx.push({ k: 'num', x: hero.x, y: hero.y - 120, t: 0, life: .8, txt: 16, foe: true }, { k: 'tag', x: hero.x, y: hero.y - 180, t: 0, life: .9, txt: 'GERMAN SUPLEX!' });
@@ -11206,7 +11215,7 @@ function drGnpUpd(e, dt) {
 function updateDrone(e, dt) {
   const C = CY.drone;
   if (e.delay > 0) { e.delay -= dt; return; }
-  e.st += dt; e.ft += dt * 1000; tokTick(e);
+  e.st += dt; e.ft += dt * 1000; tokTick(e); DR_CUR = e; if (e.state !== 'cloak') e.alpha = 1;
   if (e.inv > 0 && e.inv < 90) e.inv -= dt;
   e.cd -= dt; e.dashcd -= dt; e.divecd -= dt; e.grabcd -= dt; e.uppercd = (e.uppercd || 0) - dt; e.pulsecd -= dt; e.gnpcd -= dt; e.guardcd -= dt; if (e.blockT > 0) e.blockT -= dt;
   if (e.adaptT > 0) { e.adaptT -= dt; if (e.adaptT <= 0) e.adapt = null; }
@@ -11230,12 +11239,15 @@ function updateDrone(e, dt) {
   }
   if (e.z > 0 && S !== 'dive') { e.vz = (e.vz || 0) - 1500 * dt; e.z = Math.max(0, e.z + e.vz * dt); if (e.z === 0) e.vz = 0; }
   if (S === 'hurt') { e.ca = 'hurt'; e.cfi = e.hurtBig ? 1 : e.hurtLow ? 2 : 0; e.vx *= Math.pow(.02, dt); e.stun -= dt; if (e.stun <= 0) { drSet(e, 'idle'); e.cd = Math.min(e.cd, .4); } return; }
-  if (S === 'guard') { e.ca = 'guard'; e.cfi = e.blockT > 0 ? 1 : 0; e.vx *= .8; e.vy = 0; if (e.st > e.guardLen) { drSet(e, 'idle'); e.cd = Math.min(e.cd, .25); e.guardcd = .8 + Math.random(); } return; }
+  if (S === 'guard') { e.ca = 'guard'; e.cfi = e.blockT > 0 ? 1 : 0; e.vx *= .8; e.vy = 0;
+    if (e.riposte && !(e.blockT > 0)) { e.riposte = false; game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .7, txt: 'COUNTER!' }); drStart(e, 'counter'); return; }
+    if (e.st > e.guardLen) { drSet(e, 'idle'); e.cd = Math.min(e.cd, .25); e.guardcd = .8 + Math.random(); } return; }
   if (S === 'seq') { drSeqUpd(e, dt); return; }
   if (S === 'hold') { drHoldUpd(e, dt); return; }
   if (S === 'gpunch') { drGPunchUpd(e, dt); return; }
   if (S === 'arm') { drArmUpd(e, dt); return; }
   if (S === 'gnp') { drGnpUpd(e, dt); return; }
+  if (drRoleUpd(e, dt)) return;
   if (S === 'dash') {
     // booster step: a short thruster burst along the lane, afterimages and jet sparks, straight into the jab
     e.ca = 'dash'; e.cfi = 0; e.vx = e.face * 820; e.vy = Math.sign(dy) * Math.min(120, ady * 6);
@@ -11264,9 +11276,9 @@ function updateDrone(e, dt) {
     if (e.st < .4 && Math.random() < .5) drZap(e.x, e.y, 70);
     if (e.cfi === 1 && !e.pulsed) {
       e.pulsed = true; game.shake = Math.max(game.shake, 10); audio.thump(120, .25, .5); audio.noise(.3, 2400, 'bandpass', .3);
-      game.fx.push({ k: 'drring', x: e.x, y: e.y, t: 0, life: .4, draw(fx, sx) { const q = fx.t / fx.life; ctx.save(); ctx.strokeStyle = `rgba(200,150,255,${1 - q})`; ctx.lineWidth = 8 * (1 - q) + 2;
-        ctx.beginPath(); ctx.ellipse(sx, fx.y - 70, 30 + q * 140, 26 + q * 100, 0, 0, 7); ctx.stroke(); ctx.restore(); } });
-      if (heroHittable() && hero.state !== 'held' && adx < 135 && ady < 40) damage(hero, { dmg: 8, kb: 380, reach: 999, big: true, knock: true }, e);
+      game.fx.push({ k: 'drring', x: e.x, y: e.y, R: e.pulseR || 1, t: 0, life: .4, draw(fx, sx) { const q = fx.t / fx.life; ctx.save(); ctx.strokeStyle = `rgba(${e.zcol},${1 - q})`; ctx.lineWidth = 8 * (1 - q) + 2;
+        ctx.beginPath(); ctx.ellipse(sx, fx.y - 70, 30 + q * 140 * fx.R, 26 + q * 100 * fx.R, 0, 0, 7); ctx.stroke(); ctx.restore(); } });
+      if (heroHittable() && hero.state !== 'held' && adx < 135 * (e.pulseR || 1) && ady < 40) damage(hero, { dmg: 8, kb: 380, reach: 999, big: true, knock: true }, e);
     }
     if (e.st > .8) { e.pulsed = false; drEnd(e, .6); e.pulsecd = 6 + Math.random() * 3; }
     return;
@@ -11309,6 +11321,7 @@ function updateDrone(e, dt) {
   if (game.drHold && game.drHold !== e && game.drHold.hPh === 'nelson' && hero.state === 'held' && !game.enemies.some(o => o.state === 'gpunch' && o.gTarget === game.drHold) && adx < 520) {
     drSet(e, 'gpunch'); e.gTarget = game.drHold; e.gT = 0; e.gHit = 0; return;
   }
+  if (drRoleAI(e, dt, adx, ady, dx)) return;
   if (!busy && hero.state !== 'down') {
     if (hm && hero.face === -Math.sign(dx) && adx < 150 && ady < 30 && hero.fi <= 1 && e.guardcd <= 0 && Math.random() < (e.adapt === hero.state ? .8 : .25)) { drSet(e, 'guard'); e.guardLen = .4 + Math.random() * .25; return; }
     if (e.pulsecd <= 0 && adx < 85 && ady < 26 && (e.crowdT || 0) > .8 && tokWant(e, 1)) { drSet(e, 'pulse'); e.pulsed = false; return; }
@@ -11317,10 +11330,10 @@ function updateDrone(e, dt) {
     if (hero.z > 20 && adx < 140 && ady < 28 && e.uppercd <= 0 && e.cd < .6 && heroHittable() && tokWant(e, 1)) { drStart(e, 'upper'); e.uppercd = 1.8 + Math.random() * 1.2; return; }
     if (e.cd <= 0) {
       if (e.dashcd <= 0 && adx > 220 && adx < 460 && ady < 40 && tokWant(e, 1)) { drSet(e, 'dash'); e.face = Math.sign(dx) || e.face; e.dashcd = 3 + Math.random() * 2; return; }
-      if (e.divecd <= 0 && adx > 170 && adx < 300 && ady < 24 && tokWant(e, 1)) { drSet(e, 'dive'); e.dPh = 'rise'; e.vz = 520; e.z = .01; e.hitDone = false; e.divecd = 5 + Math.random() * 3; return; }
+      if (e.divecd <= 0 && adx > 170 && adx < 300 && ady < 24 && tokWant(e, 1)) { drSet(e, 'dive'); e.dPh = 'rise'; e.vz = 520; e.z = .01; e.hitDone = false; e.divecd = (5 + Math.random() * 3) * (e.diveMul || 1); return; }
       if (adx < 110 && ady < 22 && tokWant(e, 1)) {
         const r = Math.random(), mates = game.enemies.filter(o => o !== e && o.cls === 'drone' && !['ko', 'down', 'hurt'].includes(o.state)).length;
-        if (e.grabcd <= 0 && r < .3 && heroHittable() && hero.z < 4 && adx < 85) { if (mates > 0 && !game.drHold) drHoldStart(e); else if (mates === 0 && Math.random() < .5) drHoldStart(e, true); else drArmStart(e); return; }
+        if (e.grabcd <= 0 && r < (e.grabP || .3) && heroHittable() && hero.z < 4 && adx < 85) { if (mates > 0 && !game.drHold) drHoldStart(e); else if (mates === 0 && Math.random() < .5) drHoldStart(e, true); else drArmStart(e); if (e.role === 'blonde') e.grabcd *= .55; return; }
         drStart(e, r < .36 ? 'a' : r < .58 ? 'b' : r < .88 && e.uppercd <= 0 ? 'upper' : 'sweep'); if (e.mv === 'upper') e.uppercd = 2 + Math.random() * 1.5; return;
       }
     }
@@ -11334,7 +11347,7 @@ function updateDrone(e, dt) {
   const kk = Math.min(1, dt * 3.5); e.stx += (tx - e.stx) * kk; e.sty += (ty - e.sty) * kk;
   const mx = e.stx - e.x, my = e.sty - e.y;
   if (!e.mvX && Math.abs(mx) > 20) e.mvX = true; else if (e.mvX && Math.abs(mx) < 6) e.mvX = false;
-  let want = e.mvX ? Math.sign(mx) * e.speed * (Math.abs(mx) > 250 ? 1.5 : 1) : 0;
+  let want = e.mvX ? Math.sign(mx) * e.speed * (e.rallyT > 0 ? 1.3 : 1) * (Math.abs(mx) > 250 ? 1.5 : 1) : 0;
   if (want && Math.sign(want) === Math.sign(e.x - hero.x) && adx < 200) want *= .55;   // backing off: a guarded shuffle, so pressure catches her
   e.vx += (want - e.vx) * Math.min(1, dt * 8); e.vy = Math.abs(my) > 6 ? Math.sign(my) * e.speed * .6 : 0;
   drWalkFrames(e, dt);
@@ -11351,16 +11364,204 @@ function droneDefend(t, hit, att) {
   const front = att && Math.sign(att.x - t.x) === t.face;
   if (!front || !['idle', 'guard'].includes(t.state)) return false;
   const read = t.adapt && att === (hero.__real || hero) && att.state === t.adapt;
-  if (t.state !== 'guard' && Math.random() >= (read ? .7 : CY.drone.guard)) return false;
+  if (t.state !== 'guard' && Math.random() >= (read ? .7 : t.guardP != null ? t.guardP : CY.drone.guard)) return false;
   if (t.state !== 'guard') { drSet(t, 'guard'); t.guardLen = .4; }
-  if (hit.big && !read && Math.random() < .55) {
+  if (hit.big && !read && Math.random() < (t.role === 'blue' ? .25 : .55)) {
     drSet(t, 'hurt'); t.stun = .6; t.vx = att.face * 180; t.hurtBig = true;
     game.fx.push({ k: 'tag', x: t.x, y: t.y - 190, t: 0, life: .8, txt: 'GUARD BREAK!' }); game.hitstop = .08; game.shake = 8; audio.hit(true); return true;
   }
   t.blockT = .14; t.vx = att.face * 90; t.st = Math.min(t.st, .1);
+  if (t.role === 'blue' && att && Math.abs(att.x - t.x) < 150 && Math.random() < .6) t.riposte = true;
   game.fx.push({ k: 'block', x: t.x + t.face * 34, y: t.y - 100, t: 0, life: .25 }, { k: 'tag', x: t.x, y: t.y - 190, t: 0, life: .5, txt: read ? 'READ IT!' : 'BLOCK' });
   game.hitstop = .03; audio.thump(320, .06, .25);
   return true;
+}
+/* ---------- DRONE SQUAD ROLES ----------
+   Every squad colour is a role: a few stat changes and one signature move, so a mixed squad has real priorities.
+   SILVER leader (tough; barks orders that rally the squad; her shock punches nearly always stun)
+   RED assault (hits hard, rarely guards; BREACH shoulder charge that chains into the shock uppercut)
+   BLUE defender (guards a lot, rarely broken; COUNTER spinning backfist off a block; a wider stun pulse)
+   PINK medic (frail; runs to a downed or hurt squad-mate and shocks her back up - REBOOT!)
+   BLONDE grappler (grabs far more; a running CATCH into the suplex, and a second suplex on the way over)
+   GREEN recon (fast, frail, more dive kicks; CLOAK - fades out, slips behind you and ambushes)
+   LILAC tech (frail; shocks nearly always stun; TASER bolts at range and SHOCK TRAPS on the boards) */
+const DRROLE = {
+  silver: { hp: 1.35, dmg: 1.15, guard: .3, zap: .6, poise: 60 },
+  red:    { hp: 1, dmg: 1.25, spd: 1.08, guard: .1, poise: 46 },
+  blue:   { hp: 1.1, dmg: .9, guard: .5, pulse: 1.45, poise: 52 },
+  pink:   { hp: .9, dmg: .85, spd: 1.05 },
+  blonde: { hp: 1.1, grab: .55, poise: 48 },
+  green:  { hp: .85, dmg: .9, spd: 1.3, dive: .5, poise: 34 },
+  lilac:  { hp: .8, dmg: .9, zap: .75, poise: 34 },
+};
+const DR_ORDERS = ['FLANK!', 'PIN THEM DOWN!', 'SQUAD, ENGAGE!', 'BOX THEM IN!'];
+let DR_CUR = null;   // the drone being updated: her squad colour tints her lightning
+function drRgb(e) {
+  const h = (e && VARIANT_HEX[e.variant]) || '#b06cff', n = parseInt(h.slice(1), 16);
+  let r = n >> 16, g = (n >> 8) & 255, b = n & 255; r = Math.round(r + (255 - r) * .35); g = Math.round(g + (255 - g) * .35); b = Math.round(b + (255 - b) * .35);
+  return r + ',' + g + ',' + b;
+}
+function drRoleInit(e) {
+  const R = DRROLE[e.variant] || {};
+  e.role = e.variant; e.hp = e.maxHp = Math.round(CY.drone.hp * (R.hp || 1)); e.dmgMul = R.dmg || 1; e.speed = CY.drone.speed * (R.spd || 1);
+  e.guardP = R.guard != null ? R.guard : CY.drone.guard; e.zapP = R.zap || .3; e.grabP = R.grab || .3; e.pulseR = R.pulse || 1;
+  e.diveMul = R.dive || 1; e.poiseMax = R.poise || CY.drone.poise; e.zcol = drRgb(e);
+  e.roleCd = 2.5 + Math.random() * 3; e.trapCd = 4 + Math.random() * 3; e.alpha = 1;
+  return e;
+}
+function drMates(e) { return game.enemies.filter(o => o !== e && o.cls === 'drone' && o.state !== 'ko' && !o.remove && (!game.watch || o.team === e.team)); }
+
+// ---- the AI hook: called each think; true when a role move took over ----
+function drRoleAI(e, dt, adx, ady, dx) {
+  e.roleCd -= dt; e.trapCd -= dt;
+  if (e.rallyT > 0) { e.rallyT -= dt; e.cd -= dt * .6; if (Math.random() < dt * 6) game.fx.push({ k: 'ember', x: e.x + (Math.random() - .5) * 40, y: e.y - 40 - Math.random() * 110, t: 0, life: .3, col: e.zcol }); }
+  const free = !['held', 'ko'].includes(hero.state), ready = e.cd <= 0 && e.roleCd <= 0;
+  switch (e.role) {
+    case 'silver': {
+      const m = drMates(e).filter(o => o.state !== 'down');
+      if (ready && m.length && free && adx > 130 && !(e.tok > 0)) { drSet(e, 'order'); e.ordered = false; e.roleCd = 8 + Math.random() * 4; return true; }
+      break;
+    }
+    case 'red':
+      if (ready && free && hero.state !== 'down' && adx > 160 && adx < 420 && ady < 30 && tokWant(e, 1)) { drSet(e, 'rush'); e.face = Math.sign(dx) || e.face; e.rPh = 'wind'; e.roleCd = 5 + Math.random() * 2; return true; }
+      break;
+    case 'pink': {
+      e.revCd = (e.revCd || 0) - dt;
+      const t = drMates(e).filter(o => (o.state === 'down' && o.landT != null && e.revCd <= 0) || (e.roleCd <= 0 && o.hp < o.maxHp * .5 && !['ko', 'hold', 'gnp', 'gpunch', 'down'].includes(o.state)))
+        .sort((a, b) => Math.abs(a.x - e.x) - Math.abs(b.x - e.x))[0];
+      if (t && Math.abs(t.x - e.x) < 600) { tokFree(e); drSet(e, 'heal'); e.hTarget = t; e.hDown = t.state === 'down'; if (e.hDown) { e.revCd = 6 + Math.random() * 2; t.downHold = Math.max(t.downHold || 0, 1.6); } else e.roleCd = 8 + Math.random() * 3; return true; }
+      break;
+    }
+    case 'blonde':
+      if (ready && free && hero.state !== 'down' && e.grabcd <= 0 && adx > 150 && adx < 300 && ady < 24 && hero.z < 4 && heroHittable() && tokWant(e, 1)) {
+        drSet(e, 'rcatch'); e.face = Math.sign(dx) || e.face; e.roleCd = 6 + Math.random() * 2; return true;
+      }
+      break;
+    case 'green':
+      if (ready && free && hero.state !== 'down' && adx > 150 && adx < 420 && tokWant(e, 1)) { drSet(e, 'cloak'); e.roleCd = 6 + Math.random() * 3; return true; }
+      break;
+    case 'lilac':
+      if (e.cd <= 0 && e.trapCd <= 0 && free && adx > 110 && adx < 320 && game.fx.filter(f => f.k === 'drtrap' && f.own === e).length < 2) { drSet(e, 'trap'); e.trapCd = 7 + Math.random() * 3; return true; }
+      if (ready && free && hero.state !== 'down' && adx > 170 && adx < 560 && ady < 20 && tokWant(e, 1)) { drSet(e, 'taser'); e.face = Math.sign(dx) || e.face; e.fired = false; e.roleCd = 3.2 + Math.random() * 1.6; return true; }
+      break;
+  }
+  return false;
+}
+
+// ---- role states ----
+function drRoleUpd(e, dt) {
+  const S = e.state, t = e.st;
+  if (S === 'order') {   // hand to the comms: the squad gets a burst of speed and urgency
+    e.vx = 0; e.vy = 0; e.ca = 'win'; e.cfi = 1;
+    if (!e.ordered && t > .18) {
+      e.ordered = true; audio.noise(.12, 3200, 'highpass', .2);
+      game.fx.push({ k: 'tag', x: e.x, y: e.y - 205, t: 0, life: 1, txt: DR_ORDERS[Math.floor(Math.random() * DR_ORDERS.length)] });
+      for (const o of drMates(e)) { o.rallyT = 4.5; o.cd = Math.min(o.cd, .3); drZap(o.x, o.y, 150, e.zcol); }
+    }
+    if (t > .75) drEnd(e, .5);
+    return true;
+  }
+  if (S === 'rush') {    // BREACH: drop the shoulder, rocket in; a hit staggers them right into the uppercut
+    if (e.rPh === 'wind') { e.vx = 0; e.ca = 'guard'; e.cfi = 0; if (Math.random() < .5) game.fx.push({ k: 'ember', x: e.x - e.face * 20, y: e.y - 30 - Math.random() * 60, t: 0, life: .3, col: e.zcol }); if (t > .28) { e.rPh = 'go'; e.st = 0; audio.noise(.25, 900, 'bandpass', .3); } return true; }
+    e.ca = 'dash'; e.cfi = 0; e.vx = e.face * 700; e.vy = 0; if (Math.random() < .7) drGhost(e);
+    if (Math.random() < .6) game.fx.push({ k: 'ember', x: e.x - e.face * 30, y: e.y - 50 - Math.random() * 40, t: 0, life: .25, col: e.zcol });
+    const front = (hero.x - e.x) * e.face;
+    if (front > -10 && front < 80 && Math.abs(hero.y - e.y) < 26 && heroHittable() && hero.state !== 'held') {
+      if (cyHit(e, { dmg: 10, kb: 70, reach: 999, big: true, stun: .75 })) {
+        game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 190, t: 0, life: .8, txt: 'BREACH!' }); game.shake = Math.max(game.shake, 9);
+        e.vx = 0; drStart(e, 'upper'); e.uppercd = 2; return true;
+      }
+      drEnd(e, .8); return true;
+    }
+    if (t > .5) drEnd(e, .9);
+    return true;
+  }
+  if (S === 'heal') {    // the medic: get to her, hands on the suit, a jolt - back on her feet
+    const m = e.hTarget;
+    if (!m || m.state === 'ko' || m.remove || (e.hDown && m.state !== 'down')) { drEnd(e, .4); return true; }
+    const tx = m.x + (Math.sign(e.x - m.x) || 1) * 62, near = Math.abs(m.x - e.x) < 100 && Math.abs(m.y - e.y) < 22;
+    if (!(near && (e.hT > 0 || Math.abs(tx - e.x) < 16 || !e.hDown))) {
+      if (t > 3) { drEnd(e, .4); return true; }
+      e.vx = Math.sign(tx - e.x) * e.speed * 1.9; e.vy = Math.sign(m.y - e.y) * Math.min(e.speed, Math.abs(m.y - e.y) * 6); e.face = Math.sign(m.x - e.x) || e.face; drWalkFrames(e, dt); e.hT = 0; return true;
+    }
+    e.vx = 0; e.vy = 0; e.face = Math.sign(m.x - e.x) || e.face; e.hT = (e.hT || 0) + dt; e.ca = 'pulse'; e.cfi = 0;
+    if (Math.random() < .5) drZap(m.x, m.y, 40 + Math.random() * 60, e.zcol);
+    if (e.hT > .55) {
+      const add = Math.min(m.maxHp - m.hp, Math.round(m.maxHp * .3)); m.hp += add;
+      if (m.state === 'down') { m.launched = false; m.landT = null; m.downHold = 0; m.inv = .5; drSet(m, 'idle'); m.cd = .3; }
+      drOrb(m.x, m.y, 90, 70, .25); audio.noise(.3, 2600, 'highpass', .3);
+      game.fx.push({ k: 'tag', x: m.x, y: m.y - 200, t: 0, life: .9, txt: e.hDown ? 'REBOOT!' : 'PATCHED UP!' }, { k: 'num', x: m.x, y: m.y - 150, t: 0, life: .8, txt: '+' + add, foe: false });
+      drEnd(e, .6);
+    }
+    return true;
+  }
+  if (S === 'rcatch') {  // the grappler's running catch: straight into the suplex
+    e.ca = 'dash'; e.cfi = 0; e.vx = e.face * 640; e.vy = Math.sign(hero.y - e.y) * Math.min(120, Math.abs(hero.y - e.y) * 6); if (Math.random() < .6) drGhost(e);
+    const front = (hero.x - e.x) * e.face;
+    if (front > 0 && front < 80 && Math.abs(hero.y - e.y) < 22 && heroHittable() && hero.z < 4) {
+      e.vx = 0; drHoldStart(e, true); game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .8, txt: 'CAUGHT!' }); return true;
+    }
+    if (t > .45) drEnd(e, .9);
+    return true;
+  }
+  if (S === 'cloak') {   // recon: fade to a shimmer, slip round behind, and come out swinging
+    const side = -(hero.face || 1), tx = hero.x + side * 88;
+    e.alpha = Math.max(.1, 1 - t / .3);
+    if (Math.random() < .25) drZap(e.x + (Math.random() - .5) * 40, e.y, 40 + Math.random() * 110, e.zcol);
+    if (t < .3) { e.vx = 0; e.ca = 'guard'; e.cfi = 0; return true; }
+    e.vx = Math.sign(tx - e.x) * e.speed * 2.4; e.vy = Math.sign(hero.y - e.y) * Math.min(e.speed, Math.abs(hero.y - e.y) * 6); e.face = Math.sign(e.vx) || e.face; drWalkFrames(e, dt);
+    if ((Math.abs(tx - e.x) < 22 && Math.abs(hero.y - e.y) < 18) || t > 1.7) {
+      e.alpha = 1; e.face = Math.sign(hero.x - e.x) || e.face; drZap(e.x, e.y, 100, e.zcol); audio.noise(.15, 2800, 'highpass', .25);
+      game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .7, txt: 'AMBUSH!' });
+      if (heroHittable() && Math.abs(hero.x - e.x) < 130) drStart(e, Math.random() < .55 ? 'b' : 'sweep'); else drEnd(e, .5);
+    }
+    return true;
+  }
+  if (S === 'taser') {   // tech: a charged bolt down the lane
+    e.vx = 0; e.vy = 0; e.ca = 'jab'; e.cfi = t < .32 ? 0 : 1;
+    if (t < .32) { if (Math.random() < .6) drZap(e.x + e.face * 40, e.y, 105, e.zcol); return true; }
+    if (!e.fired) { e.fired = true; drBolt(e); audio.noise(.2, 3400, 'highpass', .3); }
+    if (t > .65) drEnd(e, .7);
+    return true;
+  }
+  if (S === 'trap') {    // tech: crouch and set a shock mine on the boards
+    e.vx = 0; e.vy = 0; e.ca = 'pulse'; e.cfi = 0;
+    if (t > .4 && !e.trapSet) { e.trapSet = true; drTrap(e, e.x + e.face * 40, e.y + 2); audio.thump(300, .05, .2); }
+    if (t > .6) { e.trapSet = false; drEnd(e, .4); }
+    return true;
+  }
+  return false;
+}
+function drBolt(e) {
+  const x0 = e.x + e.face * 70, dmg = Math.round(7 * CY.drone.dmg * e.dmgMul);
+  game.fx.push({ k: 'drbolt', x: x0, y: e.y, z: 105, t: 0, life: 1.1, own: e, face: e.face, col: e.zcol, done: false, draw(fx, sx) {
+    if (fx.done) return;
+    const d = 600 * fx.t * fx.face, X = x0 + d; fx.x = X; sx = X - game.cam;
+    if (heroHittable() && hero.state !== 'held' && Math.abs(hero.x - X) < 30 && Math.abs(hero.y - fx.y) < 22 && hero.z < 70) {
+      fx.done = true; fx.life = fx.t + .01; damage(hero, { dmg, kb: 60, reach: 999, stun: .85 }, fx.own); drZap(hero.x, hero.y, 100, fx.col); drZap(hero.x, hero.y, 70, fx.col);
+      game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 190, t: 0, life: .7, txt: 'TASED!' }); return;
+    }
+    let r = Math.floor(fx.t * 40); const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = `rgba(${fx.col},.95)`; ctx.lineWidth = 3; ctx.shadowColor = `rgb(${fx.col})`; ctx.shadowBlur = 12;
+    const y = fx.y - fx.z; ctx.beginPath(); ctx.moveTo(sx - fx.face * 46, y); for (let i = 1; i <= 5; i++) ctx.lineTo(sx - fx.face * (46 - i * 11), y + (rnd() - .5) * 16); ctx.stroke();
+    const g = ctx.createRadialGradient(sx, y, 0, sx, y, 22); g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, `rgba(${fx.col},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, y, 22, 0, 7); ctx.fill();
+    ctx.restore(); } });
+}
+function drTrap(e, x, y) {
+  const dmg = Math.round(6 * CY.drone.dmg * e.dmgMul);
+  game.fx.push({ k: 'drtrap', x, y, z: 0, t: 0, life: 10, own: e, col: e.zcol, draw(fx, sx) {
+    if (fx.done) return;
+    const armed = fx.t > .6;
+    if (armed && heroHittable() && hero.state !== 'held' && Math.abs(hero.x - fx.x) < 40 && Math.abs(hero.y - fx.y) < 20 && hero.z < 6) {
+      fx.done = true; fx.life = fx.t + .01; damage(hero, { dmg, kb: 20, reach: 999, stun: 1.05 }, fx.own); for (let k = 0; k < 3; k++) drZap(hero.x, hero.y, 30 + k * 40, fx.col);
+      game.shake = Math.max(game.shake, 6); audio.noise(.3, 2800, 'highpass', .35); game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 190, t: 0, life: .8, txt: 'SHOCK TRAP!' }); return;
+    }
+    const blink = armed ? (Math.floor(fx.t * 4) % 2 ? 1 : .35) : .2, fade = Math.min(1, (fx.life - fx.t) * 2);
+    ctx.save(); ctx.globalAlpha = fade;
+    ctx.fillStyle = '#2a2433'; ctx.beginPath(); ctx.ellipse(sx, fx.y, 15, 6, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#d9dde8'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(${fx.col},${blink})`; ctx.beginPath(); ctx.arc(sx, fx.y - 2, 4, 0, 7); ctx.fill();
+    if (armed && Math.random() < .08) { ctx.strokeStyle = `rgba(${fx.col},.8)`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx - 12, fx.y - 2); ctx.lineTo(sx - 4, fx.y - 9); ctx.lineTo(sx + 3, fx.y - 3); ctx.lineTo(sx + 12, fx.y - 8); ctx.stroke(); }
+    ctx.restore(); } });
 }
 
 /* ---------- VERSUS: pick any opponent and variant, fight them in a single arena ---------- */
@@ -11406,7 +11607,10 @@ ROSTER.splice(4, 0, ...['green', 'blue', 'red', 'purple', 'black', 'gold'].map(k
 ROSTER.splice(ROSTER.findIndex(R => R.name === 'ROSE'), 0, ...['blonde', 'pink', 'white', 'brown'].map(k => ({
   name: 'MIKA', sub: SG_VAR[k].label, col: SG_VAR[k].col, info: SG_VAR[k].threat + ' \u00b7 PUNCH STRING, JUMP KICK, BODY SLAM' + (k === 'brown' ? ', OVERDRIVE <30%' : ''),
   make: (x, y, f, o) => makeSchool(x, y, f, Object.assign({ sv: k }, o || {})) })));
-for (const v of DRONE_POOL) ROSTER.push({ name: 'DRONE', sub: v.toUpperCase(), col: VARIANT_HEX[v], info: 'VEX’S SQUAD · SQUAD HOLD, SUPLEX, GROUND AND POUND, VISOR SCAN',
+const DR_INFO = { silver: 'SQUAD LEADER · TOUGHEST · ORDERS RALLY THE SQUAD · SHOCKS STUN', red: 'ASSAULT · HITS HARD · BREACH CHARGE INTO SHOCK UPPERCUT',
+  blue: 'DEFENDER · HEAVY GUARD · COUNTER BACKFIST · WIDE STUN PULSE', pink: 'MEDIC · REBOOTS DOWNED SQUAD-MATES · TAKE HER OUT FIRST',
+  blonde: 'GRAPPLER · RUNNING CATCH · DOUBLE SUPLEX', green: 'RECON · FASTEST · CLOAKS AND AMBUSHES FROM BEHIND', lilac: 'TECH · TASER BOLTS · SHOCK TRAPS · STUNNING SHOCKS' };
+for (const v of DRONE_POOL) ROSTER.push({ name: 'DRONE', sub: v.toUpperCase(), col: VARIANT_HEX[v], info: 'VEX’S SQUAD · ' + DR_INFO[v],
   make: (x, y, f, o) => makeCyber('drone', v, x, y, f, o) });
 const SEL_COLS = 5;
 document.getElementById('bT').addEventListener('pointerdown', ev => { ev.preventDefault(); goTitle(); });
