@@ -11322,13 +11322,16 @@ function updateDrone(e, dt) {
     }
   }
   // ---- footwork: the one with the token closes in; the rest hold a flanking spot ----
+  // ready and the target is walking into her: take the token and meet them instead of backpedalling forever
+  if (!(e.tok > 0) && e.cd <= 0 && adx < 190 && ady < 40 && !busy && hero.state !== 'down') tokWant(e, 1);
   const mine = e.tok > 0 && e.cd < .5, side = game.enemies.filter(o => o.cls === 'drone' && o.state !== 'ko').length > 1 ? e.slot : (Math.sign(e.x - hero.x) || 1);
   const tx = hero.x + side * (mine ? 95 : 175 + e.off), ty = hero.y + (mine ? 0 : e.offY * .6);
   if (e.stx == null) { e.stx = tx; e.sty = ty; }
   const kk = Math.min(1, dt * 3.5); e.stx += (tx - e.stx) * kk; e.sty += (ty - e.sty) * kk;
   const mx = e.stx - e.x, my = e.sty - e.y;
   if (!e.mvX && Math.abs(mx) > 20) e.mvX = true; else if (e.mvX && Math.abs(mx) < 6) e.mvX = false;
-  const want = e.mvX ? Math.sign(mx) * e.speed * (Math.abs(mx) > 250 ? 1.5 : 1) : 0;
+  let want = e.mvX ? Math.sign(mx) * e.speed * (Math.abs(mx) > 250 ? 1.5 : 1) : 0;
+  if (want && Math.sign(want) === Math.sign(e.x - hero.x) && adx < 200) want *= .55;   // backing off: a guarded shuffle, so pressure catches her
   e.vx += (want - e.vx) * Math.min(1, dt * 8); e.vy = Math.abs(my) > 6 ? Math.sign(my) * e.speed * .6 : 0;
   drWalkFrames(e, dt);
 }
