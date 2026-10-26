@@ -11310,14 +11310,14 @@ function updateDrone(e, dt) {
     if (e.pulsecd <= 0 && adx < 85 && ady < 26 && (e.crowdT || 0) > .8 && tokWant(e, 1)) { drSet(e, 'pulse'); e.pulsed = false; return; }
     e.crowdT = adx < 85 ? (e.crowdT || 0) + dt : 0;
     // anti-air: a jumper coming in close eats the shock uppercut
-    if (hero.z > 25 && adx < 125 && ady < 28 && e.uppercd <= 0 && e.cd < .6 && heroHittable() && tokWant(e, 1)) { drStart(e, 'upper'); e.uppercd = 2.5 + Math.random() * 1.5; return; }
+    if (hero.z > 20 && adx < 140 && ady < 28 && e.uppercd <= 0 && e.cd < .6 && heroHittable() && tokWant(e, 1)) { drStart(e, 'upper'); e.uppercd = 1.8 + Math.random() * 1.2; return; }
     if (e.cd <= 0) {
       if (e.dashcd <= 0 && adx > 220 && adx < 460 && ady < 40 && tokWant(e, 1)) { drSet(e, 'dash'); e.face = Math.sign(dx) || e.face; e.dashcd = 3 + Math.random() * 2; return; }
       if (e.divecd <= 0 && adx > 170 && adx < 300 && ady < 24 && tokWant(e, 1)) { drSet(e, 'dive'); e.dPh = 'rise'; e.vz = 520; e.z = .01; e.hitDone = false; e.divecd = 5 + Math.random() * 3; return; }
       if (adx < 110 && ady < 22 && tokWant(e, 1)) {
         const r = Math.random(), mates = game.enemies.filter(o => o !== e && o.cls === 'drone' && !['ko', 'down', 'hurt'].includes(o.state)).length;
         if (e.grabcd <= 0 && r < .3 && heroHittable() && hero.z < 4 && adx < 85) { if (mates > 0 && !game.drHold) drHoldStart(e); else if (mates === 0 && Math.random() < .5) drHoldStart(e, true); else drArmStart(e); return; }
-        drStart(e, r < .45 ? 'a' : r < .7 ? 'b' : r < .87 && e.uppercd <= 0 ? 'upper' : 'sweep'); if (e.mv === 'upper') e.uppercd = 3 + Math.random() * 2; return;
+        drStart(e, r < .36 ? 'a' : r < .58 ? 'b' : r < .88 && e.uppercd <= 0 ? 'upper' : 'sweep'); if (e.mv === 'upper') e.uppercd = 2 + Math.random() * 1.5; return;
       }
     }
   }
