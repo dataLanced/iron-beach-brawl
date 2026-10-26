@@ -4721,11 +4721,21 @@ function gkClinch(e, dt) {
       if (!e.slammed) { e.slammed = true;
         if (e.holding) releaseHero(e);
         hero.x = e.x + e.face * 70; hero.y = e.y; hero.z = 0; if (hero.state === 'held') setState(hero, 'idle');
-        damage(hero, { dmg: gkDmg(e, 16), kb: 120, reach: 999, big: true, knock: true, launch: 560, stop: .24 }, e);
+        damage(hero, { dmg: gkDmg(e, 16), kb: 120, reach: 999, big: true, knock: true, launch: 560, juggle: true, stop: .24 }, e);
         game.shake = 24; audio.thump(40, .5, .8); audio.noise(.8, 500, 'lowpass', .5); dust(hero.x, e.y, 16);
         game.fx.push({ k: 'tag', x: hero.x, y: e.y - 210, t: 0, life: 1.2, txt: 'INFERNO SLAM!' }, { k: 'powerring', x: hero.x, y: e.y, t: 0, life: .6, col: '255,140,30' });
         game.fx.push({ k: 'gkboom', x: hero.x, y: e.y, t: 0, life: .9, draw: gkBoomDraw });
         kunaiEmbers({ x: hero.x, y: e.y }, 30, 90);
+        e.fuPick = Math.random() < .65 ? 'air' : 'bolt';
+      }
+      // she isn't done: leap after them for an air combo, or call lightning down on them where they land
+      if (e.fuPick && t - a > 170 && hero.state === 'down' && hero.hp > 0) {
+        const pick = e.fuPick; e.fuPick = null;
+        if (pick === 'air' && hero.z > 40 && e.frames.air) {
+          e.face = Math.sign(hero.x - e.x) || e.face; rkSet(e, 'rair'); e.airKind = Math.random() < .5 ? 'spike' : 'izuna'; e.hits = 0;
+          game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .9, txt: 'NOT DONE YET!' }); audio.whiff(); dust(e.x, e.y, 6); return;
+        }
+        e.ltcd = 0; e.gfu = true;   // (picked up by her free movement once she's up: the Lightning Jutsu on the downed player)
       }
       return; }
     e.cfi = 6; e.face = -F;
