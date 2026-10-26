@@ -2954,7 +2954,7 @@ function updateShots(dt) {
       s.z += s.vz * dt;
       if (s.z <= 4) { s.dead = true; dust(s.x, s.y, 2); audio.thump(1200, .03, .1); continue; }   // sticks in the boards
       if (heroHittable() && hero.state !== 'held' && Math.abs(hero.y - s.y) < 24 && Math.abs(hero.x - s.x) < 34 && s.z < 150) {
-        s.dead = true; damage(hero, { dmg: Math.round(8 * ((s.owner && s.owner.dmgMul) || 1)), kb: 140, reach: 999 }, { x: s.x - Math.sign(s.vx) * 20, face: Math.sign(s.vx) });
+        s.dead = true; damage(hero, { dmg: Math.round((s.dmg || 8) * ((s.owner && s.owner.dmgMul) || 1)), kb: 140, reach: 999 }, { x: s.x - Math.sign(s.vx) * 20, face: Math.sign(s.vx) });
       }
       if (s.x < game.cam - 120 || s.x > game.cam + W + 120) s.dead = true;
       continue;
@@ -3114,6 +3114,12 @@ const RKG = {
     { a: 'gchop', f: 5, ms: 120, abs: 1, mv: 100, z: [75, 20] },
     { a: 'gchop', f: 6, ms: 260, abs: 1, z: [20, 0], hit: { dmg: 11, kb: 360, reach: 145, big: true, knock: true, launch: 320, stop: .12 }, gchop: 3, land: true },
     { a: 'gchop', f: 7, ms: 200, abs: 1 }, { a: 'gchop', f: 8, ms: 160, abs: 1 }],
+  // KATANA: purple's two cuts and one more - diagonal, horizontal, then a rising cut that launches (6-frame 'katana' row)
+  katana: [{ a: 'katana', f: 0, ms: 220, abs: 1, sfx: 'draw' }, { a: 'katana', f: 1, ms: 200, abs: 1 },
+    { a: 'katana', f: 2, ms: 190, abs: 1, mv: 60, hit: { dmg: 12, kb: 80, reach: 185, big: true, stop: .11 }, kcut: 1 },
+    { a: 'katana', f: 3, ms: 200, abs: 1, mv: 60, hit: { dmg: 12, kb: 90, reach: 205, big: true, stop: .11 }, kcut: 2 },
+    { a: 'katana', f: 4, ms: 280, abs: 1, mv: 40, hit: { dmg: 15, kb: 120, reach: 185, big: true, knock: true, launch: 680, juggle: true, stop: .16 }, kcut: 3 },
+    { a: 'katana', f: 5, ms: 340, abs: 1 }],
   // GOLDEN DRAGON UPPERCUT: crouched charge (her fist lights), then up through the player in a pillar of golden flame
   dragon: [{ a: 'gup', f: 0, ms: 300, abs: 1, charge: true }, { a: 'gup', f: 1, ms: 140, abs: 1, mv: 160, z: [0, 110], hit: { dmg: 18, kb: 220, reach: 135, big: true, knock: true, launch: 820, juggle: true, stop: .18 }, dragon: true },
     { a: 'gup', f: 2, ms: 220, abs: 1, mv: 40, z: [110, 150] }, { a: 'gup', f: 2, ms: 160, abs: 1, z: [150, 0] }, { a: 'gup', f: 3, ms: 300, abs: 1, land: true }],
@@ -3176,6 +3182,7 @@ function updateRookie(e, dt) {
   if (e.balls && e.balls.length) rkBalls(e, dt);
   if (e.clones && e.clones.length) rkClones(e, dt);
   if (e.tagT != null) { e.tagT += dt; if (e.tagT >= .8) { e.tagT = null; rkTagBoom(e); e.tagFx = null; } }
+  if (rkGold(e) && gkUpd(e, dt, dx, dy, adx, ady)) return;
   if (S === 'rjutsu') {
     e.vx = 0; e.vy = 0; e.ca = 'jutsu';
     let acc = 0, i = 0; while (i < RK_JUTSU.length - 1 && e.ft >= acc + RK_JUTSU[i]) { acc += RK_JUTSU[i]; i++; }
@@ -3289,10 +3296,12 @@ function updateRookie(e, dt) {
         e.airborne = true; e.vz = 560; audio.whiff();
         const dir = e.hopAway ? -(Math.sign(dx) || e.face) : (Math.sign(dx) || e.face);
         e.vx = dir * (e.kick ? Math.min(330, adx * 1.05) : 230); e.face = e.hopAway ? -dir : dir; e.vy = Math.sign(dy) * Math.min(60, ady * 2);
+        if (rkGold(e) && !e.hopAway) gkTakeoff(e, adx);
       }
       return;
     }
     if (e.landT == null) {
+      if (rkGold(e) && gkAir(e, dt)) return;
       const landed = cyGravity(e, dt);
       e.ca = 'jump'; e.cfi = e.kick && e.vz < 120 ? 2 : 1;
       if (e.kick && e.cfi === 2 && !e.hitDone && heroHittable() && hero.state !== 'held' && Math.abs(hero.x - e.x) < 135 && (hero.x - e.x) * e.face > 0 && ady < 30) {
@@ -3727,6 +3736,7 @@ function updateRookie(e, dt) {
     }
     // the jumping spin chop closes the gap from a jump's length away
     if (!busy && e.chcd <= 0 && adx > 150 && adx < 280 && ady < 26 && Math.random() < dt * 1.6) { rkGo(e, RKG.chop); e.chcd = 4 + Math.random() * 3; e.hopcd = Math.max(e.hopcd, 1.5); return; }
+    if (gkAI(e, dt, dx, dy, adx, ady, busy)) return;
   }
   if (rkPurple(e)) {
     e.sdcd = (e.sdcd == null ? 1 : e.sdcd) - dt; e.sacd = (e.sacd == null ? 3 + Math.random() * 3 : e.sacd) - dt;
@@ -3739,7 +3749,7 @@ function updateRookie(e, dt) {
     e.flcd = (e.flcd == null ? 3 + Math.random() * 3 : e.flcd) - dt;
     if (e.nv === 'black' && e.frames.flame && !busy && !others && e.flcd <= 0 && adx > 140 && adx < 520 && ady < 60 && Math.random() < dt * .9) { rkSet(e, 'rflame'); e.sealI = -1; e.flaming = false; return; }
     e.kacd = (e.kacd == null ? 2 + Math.random() * 3 : e.kacd) - dt;
-    if (!busy && e.frames.katana && e.kacd <= 0 && adx > 90 && adx < 200 && ady < 24 && Math.random() < dt * 2.2) { rkGo(e, RKP.katana); e.kacd = 6 + Math.random() * 3; return; }
+    if (!busy && e.frames.katana && e.kacd <= 0 && adx > 90 && adx < 200 && ady < 24 && Math.random() < dt * 2.2) { rkGo(e, rkGold(e) ? RKG.katana : RKP.katana); e.kacd = 6 + Math.random() * 3; return; }
   }
   if ((rkRed(e) || rkPurple(e)) && !busy && e.ctcd <= 0 && adx < 150 && ady < 30 && hero.face === -Math.sign(dx)
       && (MOVES[hero.state] ? (!e.swingRolled && (e.swingRolled = true) && Math.random() < .35) : Math.random() < dt * .8)) {
@@ -3946,8 +3956,8 @@ function rkSmokePuff(x, y) { for (let i = 0; i < 5; i++) game.fx.push({ k: 'dust
 function rkKatanaFx(e, k) {
   // a wide steel crescent: diagonal down for the first cut, flat and long for the second
   game.fx.push({ k: 'pkkat', x: e.x, y: e.y, face: e.face, s: e.scale, cut: k, t: 0, life: .28, draw(fx, sx) {
-    const q = fx.t / fx.life, s = fx.s / .89; ctx.save(); ctx.translate(sx, fx.y - (fx.cut === 1 ? 110 : 92) * s); ctx.scale(fx.face, 1); ctx.lineCap = 'round';
-    if (fx.cut === 1) ctx.rotate(.55);
+    const q = fx.t / fx.life, s = fx.s / .89; ctx.save(); ctx.translate(sx, fx.y - (fx.cut === 1 ? 110 : fx.cut === 3 ? 120 : 92) * s); ctx.scale(fx.face, 1); ctx.lineCap = 'round';
+    if (fx.cut === 1) ctx.rotate(.55); else if (fx.cut === 3) ctx.rotate(-.75);
     for (let i = 0; i < 5; i++) { ctx.strokeStyle = `rgba(${235 - i * 10},${240 - i * 5},255,${(.95 - i * .18) * (1 - q * .75)})`; ctx.lineWidth = 11 - i * 2;
       ctx.beginPath(); ctx.ellipse(50 * s, 0, (150 - i * 8) * s, (fx.cut === 1 ? 46 : 26) * s - i * 2, 0, Math.PI * 1.15 + i * .04, Math.PI * 2.08, false); ctx.stroke(); }
     ctx.restore(); } });
@@ -4307,6 +4317,233 @@ function gkChoke(e, dt) {
     hero.koPending = false; dust(hero.x, hero.y, 5); audio.thump(70, .2, .35);
   }
   if (t > T[5]) { e.sliced = e.cackled = e.drawn = false; rkSet(e, 'idle'); e.cd = .5; }
+}
+/* ---------- GOLD KUNOICHI: THE MASTER'S EXTRAS ----------
+   - KATANA: purple's heavy katana with one more cut (diagonal, horizontal, then a rising cut that launches)
+   - AIR SHURIKEN: at the top of a jump she hangs for a beat and throws four stars down the same lane
+   - KATON: a fire-breath jutsu on the ground (a widening cone that covers several lanes) and in the air (she breathes
+     down onto the boards and leaves a wide burning patch)
+   - GIANT SHURIKEN: a huge spinning star. It's her call what happens next: when it hits, she can swap places with it
+     and be right there to keep the pressure on; when it's dodged, she can swap in behind you; otherwise it comes back.
+   - DOUBLE JUMP: a second kick off the air, with a burst of gold under her
+   Rows that aren't drawn yet fall back to frames she already has (GK_ROWS). */
+const GK_ROWS = { gfire: ['jutsu', 1], gafire: ['jump', 1], gastar: ['air', 1], ggs: ['shuriken', 1] };
+function gkF(e, row, i) {
+  if (e.frames[row] && e.frames[row][i]) return [row, i];
+  const fb = GK_ROWS[row]; return fb ? [fb[0], Math.min(fb[1] + (i ? 1 : 0), e.frames[fb[0]].length - 1)] : ['idle', 0];
+}
+function gkSetF(e, row, i) { const [r, k] = gkF(e, row, i); e.ca = r; e.cfi = k; }
+const gkDmg = (e, d) => Math.round(d * CY.ninja.dmg * (e.dmgMul || 1));
+
+// ---- per-frame upkeep (projectiles, burning floor) and the new states; true when it handled this frame ----
+function gkUpd(e, dt, dx, dy, adx, ady) {
+  e.gkcd = (e.gkcd == null ? 4 + Math.random() * 3 : e.gkcd) - dt;     // ground katon
+  e.gscd = (e.gscd == null ? 3 + Math.random() * 3 : e.gscd) - dt;     // giant shuriken
+  e.ajcd = (e.ajcd == null ? 2 + Math.random() * 2 : e.ajcd) - dt;     // jump-in (air star / air katon)
+  if (e.gs) gkGiantUpd(e, dt);
+  const S = e.state, t = e.st;
+  if (S === 'gkaton') {
+    // seal, seal, a breath in, then a roaring cone of fire that spreads across the lanes
+    e.vx = 0; e.vy = 0;
+    if (t < .22) { e.ca = 'jutsu'; e.cfi = 0; if (e.sealI !== 0) { e.sealI = 0; audio.noise(.07, 4200, 'bandpass', .12); } return true; }
+    if (t < .5) { e.ca = 'jutsu'; e.cfi = 1; if (e.sealI !== 1) { e.sealI = 1; audio.noise(.5, 900, 'bandpass', .1); } return true; }
+    if (t < 1.85) {
+      gkSetF(e, 'gfire', 0);
+      if (!e.flaming) { e.flaming = true; e.flHits = 0; e.flTick = 0; audio.noise(1.3, 500, 'lowpass', .5); audio.thump(60, .4, .4); game.shake = Math.max(game.shake, 8);
+        game.fx.push({ k: 'tag', x: e.x, y: e.y - 210, t: 0, life: 1.1, txt: 'KATON: GOLDEN BLAZE!' });
+        game.fx.push({ k: 'gkcone', x: e.x, y: e.y, t: 0, life: 99, o: e, draw: gkConeDraw }); }
+      const k = (t - .5) / 1.35; e.flReach = Math.min(1, k * 3.5) * 520; e.flSweep = Math.sin(k * Math.PI * 2) * 20;
+      game.shake = Math.max(game.shake, 2); e.flTick -= dt;
+      const front = (hero.x - e.x) * e.face, half = 22 + Math.max(0, front) * .24;
+      if (e.flTick <= 0 && heroHittable() && hero.state !== 'held' && front > 20 && front < e.flReach + 30 && Math.abs(hero.y - e.y - e.flSweep * .5) < half && hero.z < 120) {
+        e.flTick = .17; e.flHits++; const last = e.flHits >= 5;
+        damage(hero, last ? { dmg: gkDmg(e, 8), kb: 400, reach: 999, big: true, knock: true, launch: 360, stop: .14 } : { dmg: gkDmg(e, 3), kb: 50, reach: 999 }, e);
+        kunaiEmbers({ x: hero.x, y: hero.y }, last ? 20 : 5, 60);
+      }
+      if (Math.random() < dt * 30) { const d = Math.random() * e.flReach; kunaiEmbers({ x: e.x + e.face * (60 + d), y: e.y + 40 + (Math.random() - .5) * d * .4 }, 1, 30); }
+      return true;
+    }
+    e.flaming = false; e.flReach = 0; e.ca = 'jutsu'; e.cfi = 1;
+    if (t > 2.15) { e.sealI = -1; rkSet(e, 'idle'); e.cd = .5; e.gkcd = 9 + Math.random() * 4; }
+    return true;
+  }
+  if (S === 'gakaton') {
+    // in the air: hangs at the top of her jump and breathes down onto the boards - a wide patch burns for a moment
+    e.vx = 0; e.vy = 0; e.vz = 0; gkSetF(e, 'gafire', 0);
+    if (!e.flaming && t > .12) { e.flaming = true; e.flHits = 0; e.flTick = 0; audio.noise(1, 500, 'lowpass', .45); game.shake = Math.max(game.shake, 6);
+      game.fx.push({ k: 'tag', x: e.x, y: e.y - e.z - 200, t: 0, life: 1, txt: 'KATON: FIRE RAIN!' });
+      e.patch = { x: e.x + e.face * 150, y: e.y, t: 0, life: 1.9, o: e }; game.fx.push({ k: 'gkpatch', x: e.patch.x, y: e.y, t: 0, life: 1.9, p: e.patch, draw: gkPatchDraw }); }
+    if (e.flaming) gkPatchHit(e, dt);
+    if (t > 1) { e.flaming = false; gkFall(e); }
+    return true;
+  }
+  if (S === 'gastar') {
+    // air shuriken: a beat at the apex, then four stars down the same lane, one after another
+    e.vx = 0; e.vy = 0; e.vz = 0;
+    gkSetF(e, 'gastar', t < .16 ? 0 : 1);
+    const n = t < .16 ? 0 : Math.min(4, 1 + Math.floor((t - .16) / .07));
+    while ((e.thrownN || 0) < n) {
+      const i = e.thrownN || 0; e.thrownN = i + 1;
+      const sx = e.x + e.face * 40, sz = e.z + 120 * e.scale, tx = hero.x + e.face * (i * 34 - 20) + (hero.vx || 0) * .2;
+      const dist = Math.max(80, Math.abs(tx - sx)), T = dist / 600;
+      game.shots.push({ x: sx, y: e.y, z: sz, vx: e.face * 600, vz: -(sz - 40) / T, air: true, rk: true, dmg: 4, t: 0, owner: e, flash: true });
+      audio.noise(.07, 3400, 'bandpass', .16);
+    }
+    if (t > .16 && e.thrownN === 1 && !e.tagged) { e.tagged = true; game.fx.push({ k: 'tag', x: e.x, y: e.y - e.z - 200, t: 0, life: .8, txt: 'SHURIKEN RAIN!' }); }
+    if (t > .55) { e.thrownN = 0; gkFall(e); }
+    return true;
+  }
+  if (S === 'ggiant') {
+    // the giant shuriken: wind up with it over her shoulder, then send it spinning down the lane
+    e.vx = 0; e.vy = 0;
+    if (t < .36) { gkSetF(e, 'ggs', 0); if (!e.gsTag) { e.gsTag = true; audio.noise(.25, 1800, 'highpass', .15); } return true; }
+    gkSetF(e, 'ggs', 1);
+    if (!e.gs) {
+      const f = e.frames[e.ca][e.cfi];
+      e.gs = { x: e.x + e.face * 70, y: e.y, z: 100, dir: e.face, t: 0, ph: 'out', hit: false, passed: false, o: e, sx0: e.x };
+      game.fx.push({ k: 'gkgs', x: e.gs.x, y: e.y, t: 0, life: 99, g: e.gs, draw: gkGiantDraw });
+      game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .9, txt: 'GIANT SHURIKEN!' }); audio.noise(.3, 900, 'bandpass', .3);
+    }
+    if (t > .62) { e.gsTag = false; rkSet(e, 'idle'); e.cd = .3; e.gscd = 7 + Math.random() * 3; }
+    return true;
+  }
+  return false;
+}
+// back into the jump's fall (rkSet would drop her to the floor)
+function gkFall(e) { setState(e, 'rjump'); e.airborne = true; e.landT = null; e.kick = false; e.vz = 0; e.vx = 0; e.airAct = null; e.dj = true; }
+
+// ---- the AI hook (inside her gold block); true when she committed to something ----
+function gkAI(e, dt, dx, dy, adx, ady, busy) {
+  if (busy || hero.state === 'held') return false;
+  // KATON on the ground: from mid range, and the cone reaches across lanes, so she doesn't need to line up
+  if (e.gkcd <= 0 && adx > 150 && adx < 470 && ady < 90 && Math.random() < dt * .7) { rkSet(e, 'gkaton'); e.flaming = false; e.sealI = -1; e.face = Math.sign(dx) || e.face; return true; }
+  // the giant shuriken: from range, in her lane
+  if (!e.gs && e.gscd <= 0 && adx > 200 && adx < 560 && ady < 26 && Math.random() < dt * .9) { rkSet(e, 'ggiant'); e.face = Math.sign(dx) || e.face; return true; }
+  // jump in for an air shuriken volley or an air katon (with a double jump to get up there)
+  if (e.ajcd <= 0 && adx > 200 && adx < 460 && ady < 50 && Math.random() < dt * .8) {
+    rkSet(e, 'rjump'); e.kick = false; e.hopAway = false; e.airborne = false; e.hopcd = 2 + Math.random();
+    e.forceAct = Math.random() < .55 ? 'star' : 'katon'; e.ajcd = 6 + Math.random() * 3; return true;
+  }
+  return false;
+}
+// takeoff: decide on a double jump and what to do at the top
+function gkTakeoff(e, adx) {
+  e.dj = false; e.djWant = !!e.forceAct || Math.random() < .5; e.airAct = e.forceAct || null; e.forceAct = null;
+  if (e.airAct) e.vx *= .55;   // a higher, shorter jump to hang over them
+}
+// airborne: the double jump, and the apex actions; true when it took over
+function gkAir(e, dt) {
+  if (e.djWant && !e.dj && e.vz < 90 && e.z > 40) {
+    e.dj = true; e.vz = 540; audio.whiff(); audio.noise(.12, 1500, 'bandpass', .14);
+    const z0 = e.z; game.fx.push({ k: 'gkdj', x: e.x, y: e.y, z: z0, t: 0, life: .35, draw(fx, sx) { const q = fx.t / fx.life;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = `rgba(255,210,90,${.9 * (1 - q)})`; ctx.lineWidth = 4 * (1 - q) + 1;
+      ctx.beginPath(); ctx.ellipse(sx, fx.y - fx.z, 18 + q * 46, 6 + q * 14, 0, 0, 7); ctx.stroke(); ctx.restore(); } });
+    for (let i = 0; i < 4; i++) game.fx.push({ k: 'ember', x: e.x + (Math.random() - .5) * 40, y: e.y - z0 + 10, t: 0, life: .35, col: '255,210,90' });
+    return false;
+  }
+  if (e.airAct && e.vz < 40 && (e.dj || !e.djWant)) {
+    const act = e.airAct; e.airAct = null; const z = e.z;
+    if (act === 'star') { setState(e, 'gastar'); e.thrownN = 0; e.tagged = false; }
+    else { setState(e, 'gakaton'); e.flaming = false; }
+    e.z = z; e.face = Math.sign(hero.x - e.x) || e.face; return true;
+  }
+  return false;
+}
+
+// ---- katon drawing / hits ----
+function gkConeDraw(fx, sx) {
+  const e = fx.o; if (e.state !== 'gkaton' || !e.flaming || !e.flReach) { fx.life = fx.t; return; }
+  const s = e.scale, mx = e.x - game.cam + e.face * 30 * s, mz = 150 * s, R = e.flReach, sw = e.flSweep || 0;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 44; i++) {
+    const u = ((i * .618) % 1 + game.t * 2.4) % 1, d = u * R, lane = Math.sin(i * 12.9898) * (22 + d * .24);
+    const x = mx + e.face * d, y = e.y + sw * u * .5 + lane - mz * (1 - u) * (1 - u) - 40 * u, r = 8 + u * 40;
+    const g = ctx.createRadialGradient(x, y, 1, x, y, r);
+    g.addColorStop(0, `rgba(255,250,${Math.round(220 - u * 170)},${.9 - u * .4})`); g.addColorStop(.45, `rgba(255,${Math.round(185 - u * 90)},40,${.7 - u * .35})`); g.addColorStop(1, 'rgba(200,40,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+  }
+  const g = ctx.createRadialGradient(mx, e.y - mz, 1, mx, e.y - mz, 26); g.addColorStop(0, 'rgba(255,255,230,1)'); g.addColorStop(1, 'rgba(255,170,40,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mx, e.y - mz, 26, 0, 7); ctx.fill();
+  ctx.restore();
+}
+function gkPatchHit(e, dt) {
+  const p = e.patch; if (!p) return;
+  e.flTick = (e.flTick || 0) - dt;
+  const k = Math.min(1, p.t / .3), rx = 175 * k, ry = 72 * k;
+  if (e.flTick <= 0 && heroHittable() && hero.state !== 'held' && hero.z < 30 && ((hero.x - p.x) / Math.max(1, rx)) ** 2 + ((hero.y - p.y) / Math.max(1, ry)) ** 2 < 1) {
+    e.flTick = .2; e.flHits++; const last = e.flHits >= 4;
+    damage(hero, last ? { dmg: gkDmg(e, 7), kb: 300, reach: 999, big: true, knock: true, launch: 340 } : { dmg: gkDmg(e, 3), kb: 40, reach: 999 }, { x: p.x - e.face * 40, face: e.face });
+    kunaiEmbers({ x: hero.x, y: hero.y }, 6, 50);
+  }
+}
+function gkPatchDraw(fx, sx) {
+  const p = fx.p; p.t = fx.t; const e = p.o, q = fx.t / fx.life, k = Math.min(1, fx.t / .3), fade = Math.min(1, (fx.life - fx.t) * 2);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  // the stream from her mouth down to the patch while she's breathing
+  if (e.state === 'gakaton' && e.flaming) {
+    const mx = e.x - game.cam + e.face * 20, my = e.y - e.z - 140 * e.scale;
+    for (let i = 0; i < 16; i++) { const u = ((i / 16) + game.t * 3) % 1, x = mx + (sx - mx) * u, y = my + (fx.y - my) * u, r = 8 + u * 28;
+      const g = ctx.createRadialGradient(x, y, 1, x, y, r); g.addColorStop(0, `rgba(255,248,200,${.85 - u * .3})`); g.addColorStop(1, 'rgba(230,80,10,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); }
+  }
+  for (let i = 0; i < 30; i++) {
+    const a = i * 2.39996, rr = Math.sqrt((i + .5) / 30), x = sx + Math.cos(a) * 175 * k * rr, y = fx.y + Math.sin(a) * 72 * k * rr;
+    const h = 30 + 30 * Math.abs(Math.sin(game.t * 9 + i)), r = 16 + 10 * Math.sin(game.t * 7 + i * 3);
+    const g = ctx.createRadialGradient(x, y - h * .4, 1, x, y - h * .4, r + 12);
+    g.addColorStop(0, `rgba(255,240,170,${.75 * fade})`); g.addColorStop(.5, `rgba(255,140,30,${.5 * fade})`); g.addColorStop(1, 'rgba(180,30,10,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - h * .4, r + 12, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+  if (Math.random() < .4) kunaiEmbers({ x: fx.x + (Math.random() - .5) * 300 * k, y: fx.y + (Math.random() - .5) * 100 * k + 60 }, 1, 30);
+}
+
+// ---- the giant shuriken ----
+function gkGiantUpd(e, dt) {
+  const g = e.gs; g.t += dt;
+  const free = ['idle', 'walk'].includes(e.state) || (e.state === 'ggiant' && e.st > .45);
+  const swap = () => {   // she and the shuriken trade places in a puff of smoke
+    const ox = e.x, oy = e.y; rkSmoke(ox, oy, .8); rkSmoke(g.x, g.y, .8); audio.noise(.25, 1500, 'bandpass', .25);
+    e.x = Math.max(game.cam + 40, Math.min(game.cam + W - 40, g.x)); e.y = g.y; e.face = Math.sign(hero.x - e.x) || e.face;
+    g.x = ox; g.y = oy; g.ph = 'drop'; g.t = 0;
+    game.fx.push({ k: 'tag', x: e.x, y: e.y - 200, t: 0, life: .8, txt: 'SWAP!' });
+    rkGo(e, Math.random() < .5 ? RKG.power : RKG.string); e.face = Math.sign(hero.x - e.x) || e.face;
+  };
+  if (g.ph === 'out') {
+    g.x += g.dir * 620 * dt; g.y += (hero.y - g.y) * Math.min(1, dt * 1.5);
+    if (!g.hit && heroHittable() && hero.state !== 'held' && Math.abs(hero.x - g.x) < 46 && Math.abs(hero.y - g.y) < 30 && hero.z < 140) {
+      g.hit = true; damage(hero, { dmg: gkDmg(e, 9), kb: 60, reach: 999, big: true, stun: .8 }, { x: g.x - g.dir * 30, face: g.dir });
+      game.fx.push({ k: 'spark', x: g.x, y: g.y - 90, t: 0, life: .25, big: true });
+      // her call: swap in right next to them and keep going, or let it keep spinning on
+      if (free && Math.random() < .7) { g.x = hero.x - g.dir * 70; swap(); return; }
+    }
+    const past = (g.x - hero.x) * g.dir;
+    if (!g.hit && !g.passed && past > 70) { g.passed = true;   // dodged (jumped or stepped out of the lane): maybe swap in behind them
+      if (free && past < 140 && Math.abs(hero.y - g.y) < 40 && Math.random() < .45) { swap(); return; } }
+    if (Math.abs(g.x - g.sx0) > 600 || g.x < game.cam - 60 || g.x > game.cam + W + 60) { g.ph = 'back'; }
+  } else if (g.ph === 'back') {   // boomerangs home; she catches it, or it vanishes if she's busy
+    const d = e.x - g.x; g.x += Math.sign(d) * 700 * dt; g.y += (e.y - g.y) * Math.min(1, dt * 5);
+    if (Math.abs(d) < 40) { g.dead = true; audio.thump(700, .05, .2); if (e.state === 'idle') { e.face = Math.sign(g.x - e.x) || e.face; } }
+    if (g.t > 2.5) g.dead = true;
+  } else if (g.ph === 'drop') { if (g.t > .5) { g.dead = true; rkSmoke(g.x, g.y, .6); } }
+  if (e.state === 'ko' || e.remove) g.dead = true;
+  if (g.dead) e.gs = null;
+}
+function gkGiantDraw(fx, sx) {
+  const g = fx.g; if (g.dead) { fx.life = fx.t; return; }
+  fx.x = g.x; sx = g.x - game.cam; const z = g.ph === 'drop' ? 100 * (1 - Math.min(1, g.t / .4)) + 20 : g.z, a = g.t * (g.ph === 'drop' ? 8 : 26) * g.dir;
+  ctx.fillStyle = 'rgba(20,10,40,.3)'; ctx.beginPath(); ctx.ellipse(sx, g.y, 40, 9, 0, 0, 7); ctx.fill();
+  ctx.save(); ctx.translate(sx, g.y - z); ctx.scale(1, .55); ctx.rotate(a);
+  for (let k = 0; k < 4; k++) {   // four curved blades
+    ctx.save(); ctx.rotate(k * Math.PI / 2);
+    ctx.fillStyle = '#e9e2cf'; ctx.strokeStyle = '#2b2620'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-9, -9); ctx.quadraticCurveTo(10, -26, 46, -10); ctx.quadraticCurveTo(20, -4, 9, 9); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#d9a62e'; ctx.beginPath(); ctx.moveTo(-4, -6); ctx.quadraticCurveTo(8, -16, 30, -10); ctx.quadraticCurveTo(14, -7, 6, 4); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = '#2b2620'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, 7); ctx.fill(); ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, 7); ctx.fill();
+  ctx.restore();
+  if (g.ph !== 'drop') { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(255,220,120,.35)'; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.ellipse(sx, g.y - z, 50, 28, 0, 0, 7); ctx.stroke(); ctx.restore(); }
 }
 
 /* ---------- ROSE: the boxer (new design) ----------
