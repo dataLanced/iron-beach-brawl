@@ -12318,7 +12318,8 @@ function drClashUpd(e, b, dt) {
     game.fx.push({ k: 'tag', x: loser.x, y: loser.y - 220, t: 0, life: 1.2, txt: silverWins ? 'OVERPOWERED!' : 'BLASTED THROUGH!' });
     game.fx.push({ k: 'powerring', x: loser.x, y: loser.y, t: 0, life: .6, col: silverWins ? e.zcol : '255,70,50' });
     game.shake = 22; game.hitstop = .15; audio.thump(40, .6, .8);
-    damage(loser, { dmg: silverWins ? 16 : 22, kb: 560, reach: 999, big: true, knock: true, launch: 480, stop: .2 }, winner);
+    damage(loser, { dmg: silverWins ? Math.round(16 * CY.drone.dmg * (e.dmgMul || 1)) : Math.round(24 * CY.school.dmg * (m.dmgMul || 1) * 1.15),   // the winner's own blast, and a bit more for pushing through
+       kb: 560, reach: 999, big: true, knock: true, launch: 480, stop: .2 }, winner);
     b.ph = 'vent'; b.t = 0; b.len = 0;
     if (!silverWins) { /* Mika's blast carries on through */ }
     else { m.ebT = .9; }
