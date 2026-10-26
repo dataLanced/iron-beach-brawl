@@ -3544,8 +3544,9 @@ function updateRookie(e, dt) {
     e.vx = 0; e.vy = 0; e.ca = 'jutsu'; const t = e.st; e.cfi = t < .22 ? 0 : 1;
     if (t >= .45 && !e.cloned) {
       e.cloned = true; audio.noise(.4, 900, 'bandpass', .25);
-      game.fx.push({ k: 'tag', x: e.x, y: e.y - 190, t: 0, life: 1, txt: 'SHADOW CLONES!' });
-      e.clones = (e.clones || []).concat([-1, 1].map(s => { const c = { x: hero.x + s * (W * .62), y: hero.y + s * 14, dir: -s, t: 0, ph: 'run', owner: e };
+      game.fx.push({ k: 'tag', x: e.x, y: e.y - 190, t: 0, life: 1, txt: rkGold(e) ? 'GOLDEN CLONES!' : 'SHADOW CLONES!' });
+      const cd_ = Math.max(220, Math.min(W * .62, hero.x - game.cam + 120, game.cam + W + 120 - hero.x));   // same distance both sides: they arrive together
+      e.clones = (e.clones || []).concat([-1, 1].map(s => { const c = { x: hero.x + s * cd_, y: hero.y + s * 14, dir: -s, t: 0, ph: 'run', owner: e, gold: rkGold(e) && !!e.frames.gpow, lag: s > 0 ? .12 : 0 };
         rkShadowFx(c.x, c.y, c.dir); game.fx.push({ k: 'rkclone', x: c.x, y: c.y, t: 0, life: 99, c, draw: rkCloneDraw }); return c; }));
     }
     if (t > .75) { e.cloned = false; rkSet(e, 'idle'); e.cd = .5; e.clcd = 12 + Math.random() * 5; }
@@ -3882,12 +3883,27 @@ function rkCounter(t, hit, att) {
   rkGo(t, RK_RIPOSTE); t.ctcd = 6 + Math.random() * 3;
   return true;
 }
+const GK_CLONE_STR = [{ f: 0, ms: 130, hit: { dmg: 3, kb: 30, reach: 112 } }, { f: 1, ms: 190 }, { f: 2, ms: 210, hit: { dmg: 5, kb: 60, reach: 135, big: true } },
+  { f: 3, ms: 120 }, { f: 4, ms: 320, hit: { dmg: 6, kb: 300, reach: 160, big: true, knock: true, launch: 360 } }];
 function rkClones(e, dt) {
   for (const c of e.clones) {
     c.t += dt;
     if (c.ph === 'run') {
       c.x += c.dir * 560 * dt; c.y += (hero.y - c.y) * Math.min(1, dt * 6);
-      if ((hero.x - c.x) * c.dir < 70) { c.ph = 'hit'; c.ht = 0; audio.noise(.14, 2600, 'bandpass', .2); }
+      if ((hero.x - c.x) * c.dir < (c.gold ? 92 : 70)) { c.ph = c.gold ? 'combo' : 'hit'; c.ht = -(c.lag || 0); c.cf = 0; c.hits = 0; audio.noise(.14, 2600, 'bandpass', .2); }
+    } else if (c.ph === 'combo') {
+      // GOLD: her clones are no decoys - each one runs her whole power string from its side (jab, straight, spinning heel)
+      c.ht += dt; if (c.ht < 0) continue;
+      const T = GK_CLONE_STR; let a = 0, i = 0; while (i < T.length && c.ht >= a + T[i].ms / 1000) { a += T[i].ms / 1000; i++; }
+      if (i >= T.length) { c.dead = true; rkSmokePuff(c.x, c.y); kunaiEmbers({ x: c.x, y: c.y + 60 }, 6, 50); continue; }
+      c.cf = T[i].f; c.y += (hero.y - c.y) * Math.min(1, dt * 8); if ((hero.x - c.x) * c.dir > 70) c.x += c.dir * 260 * dt;   // stays on top of them
+      if (T[i].hit && c.hits <= i) { c.hits = i + 1;
+        const h = T[i].hit;
+        if (heroHittable() && hero.state !== 'held' && (hero.x - c.x) * c.dir > -20 && (hero.x - c.x) * c.dir < h.reach && Math.abs(hero.y - c.y) < 30) {
+          damage(hero, Object.assign({}, h, { dmg: Math.round(h.dmg * CY.ninja.dmg * (e.dmgMul || 1)), reach: 999 }), { x: c.x, face: c.dir });
+          if (h.knock) game.fx.push({ k: 'tag', x: hero.x, y: hero.y - 190, t: 0, life: .8, txt: 'PINCER!' });
+        } else audio.whiff && audio.whiff();
+      }
     } else if (c.ph === 'hit') {
       c.ht += dt;
       if (!c.hit && c.ht > .06) { c.hit = true;
@@ -3913,6 +3929,7 @@ function pkDraw(e, row, i, x, y, z, face, alpha) {
 function rkCloneDraw(fx) {
   const c = fx.c; if (c.dead) { fx.t = fx.life; return; }
   if (c.ph === 'run') pkDraw(c.owner, 'run', Math.floor(c.t / .055) % 8, c.x, c.y, 0, c.dir, .78);
+  else if (c.ph === 'combo') pkDraw(c.owner, c.ht < 0 ? 'idle' : 'gpow', c.ht < 0 ? 0 : c.cf, c.x, c.y, 0, c.dir, .82);
   else pkDraw(c.owner, 'str', 3, c.x, c.y, 0, c.dir, .78 * (1 - c.ht / .3));
 }
 function rkShadowFx(x, y, face) {
