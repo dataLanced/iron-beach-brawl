@@ -12304,7 +12304,9 @@ function drClashUpd(e, b, dt) {
   b.ct += dt; game.shake = Math.max(game.shake, 6);
   m.hitDone = true; m.ft = Math.min(m.ft, 300); m.ebT = Math.min(m.ebT, .5); b.t = Math.min(b.t, .3);   // both hold their beams while it lasts
   // the push: surges back and forth; Overdrive Mika is slightly stronger, a hurt Silver is weaker
-  const bias = .05 + (e.hp / e.maxHp - m.hp / m.maxHp) * .25;
+  // Overdrive Mika's blast is the stronger beam: Silver can hold it for a moment (surges both ways for the drama) but it
+  // pushes through - only a Mika on her last legs (under 15%) can be overpowered
+  const weak = m.hp / m.maxHp < .15, bias = weak ? -.05 : .45;
   b.p += (Math.sin(b.ct * 5 + b.seed) * .7 + (Math.random() - .5) * 1.6 - bias + (b.drift || (b.drift = (Math.random() - .5) * .5))) * dt * .7;
   b.p = Math.max(0, Math.min(1, b.p));
   const gap = Math.abs(m.x - b.x0), meet = gap * b.p;   // p: how far from Silver the beams meet (0 = in her face)
