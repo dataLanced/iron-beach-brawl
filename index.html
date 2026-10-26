@@ -4381,7 +4381,7 @@ function gkUpd(e, dt, dx, dy, adx, ady) {
       e.ca = 'gbar'; e.cfi = 1; e.vx = 0; e.vy = 0;
       const n = Math.floor(t / .085);
       if (n > e.bHits && n <= 10) { e.bHits = n;
-        if (hero.state !== 'ko' && hero.state !== 'down') {
+        if (hero.state !== 'ko' && hero.state !== 'down' && hero.state !== 'transform' && !(hero.inv > 0)) {
           hero.hp -= gkDmg(e, 1.4); hero.flash = .08; hero.st = 0; if (hero.state !== 'hurt') setState(hero, 'hurt'); hero.stun = .4; hero.vx = e.face * 30;
           game.hitstop = .025; audio.hit(false);
           game.fx.push({ k: 'spark', x: hero.x - e.face * 10 + (Math.random() - .5) * 30, y: hero.y - 70 - Math.random() * 60, t: 0, life: .15, big: false });
@@ -6269,9 +6269,30 @@ function sgScraps(e, od) {
 }
 function sgSet(e, s) { setState(e, s); e.chain = false; e.odStr = null; e.ringNext = false; e.pk = null; e.sqx = 1; e.sqy = 1; e.ca = 'idle'; e.cfi = 0; e.vx = 0; e.vy = 0; e.holdFront = false; }
 
+// OVERDRIVE BURST: crossing the threshold mid-combo, mid-grab or mid-air doesn't wait for the beating to end - she breaks
+// out of it on the spot (holds broken, everyone blown back) and transforms, falling to the boards if she was airborne
+function sgCanBurst(e) {
+  return e.cls === 'school' && !e.od && e.sv === 'brown' && typeof SODFRAMES !== 'undefined' && SODFRAMES && e.hp > 0 && e.hp < e.maxHp * SG_OD.threshold
+    && !['transform', 'ko'].includes(e.state) && !e.remove && !(e.delay > 0);
+}
+function sgOdBurst(e) {
+  const h = e.heldBy;
+  if (h) { if (h.holding) h.holding = null; if (h.state !== 'ko' && h.state !== 'hurt') { setState(h, 'hurt'); h.stun = .5; } }
+  if (!game.watch && hero.holding === e && typeof releaseGrab === 'function') releaseGrab(hero);
+  e.heldBy = null; e.vicState = null; e.spin = 0; e.rot = 0; e.escape = 0; e.holding = null; if (e.gInit || e.gLock) grabClear(e);
+  const airborne = e.z > 0;
+  sgSet(e, 'transform'); e.sheet = 'school_od'; e.frames = SODFRAMES; e.ownDown = true; e.pixel = false; e.inv = 99;
+  if (airborne) e.vz = Math.min(e.vz || 0, 0);   // drops out of the air (the transform state carries her down)
+  // the blow-out happens now, not at the rip: whatever was hitting her is thrown off
+  e.odBurst = true; audio.thump(55, .5, .7); audio.noise(.6, 900, 'bandpass', .4); game.shake = 16; game.hitstop = .12;
+  game.fx.push({ k: 'sgodflash', x: e.x, y: e.y - e.z - 80, t: 0, life: .5, draw: sgKiImpactDraw }, { k: 'powerring', x: e.x, y: e.y, t: 0, life: .7, col: '255,70,50' });
+  sgOdBlast(e);
+  game.banner = { text: 'OVERDRIVE BURST!', sub: 'MIKA UNLEASHED', t: 1.6 };
+}
 function updateSchool(e, dt) {
   const C = CY.school;
   if (e.delay > 0) { e.delay -= dt; return; }
+  if (sgCanBurst(e) && e.state !== 'idle' && e.state !== 'walk') { sgOdBurst(e); return; }
   e.st += dt; e.ft += dt * 1000;
   if (e.inv > 0 && e.inv < 90) e.inv -= dt;
   const tdt = dt * (e.tempo || 1);
@@ -6313,6 +6334,7 @@ function updateSchool(e, dt) {
   if (S === 'transform') {
     // crouch, power building (still in uniform), she rips it away (the burst blows everyone off), roar, Overdrive stance
     const T = [280, 460, 240, 520, 260]; e.vx = 0; e.vy = 0; e.inv = 99; e.ca = 'transform';
+    if (e.z > 0 || e.vz > 0) { if (cyGravity(e, dt)) { dust(e.x, e.y, 6); audio.thump(80, .15, .3); } }   // a burst in mid-air: she comes down transforming
     let t = e.st * 1000, fi = 0; while (fi < T.length - 1 && t >= T[fi]) { t -= T[fi]; fi++; }
     e.cfi = fi; e.jit = fi === 1 ? (Math.random() - .5) * 4 : 0;
     if (fi === 1) { game.shake = Math.max(game.shake, 3); if (Math.random() < dt * 30) dust(e.x + (Math.random() - .5) * 60, e.y, 1); }
@@ -12510,6 +12532,7 @@ function watchStep(dt) {
     e.wInv = e.inv;
   }
   for (const e of F) {
+    if (typeof sgCanBurst === 'function' && sgCanBurst(e) && (e.vicState || e.state !== 'idle')) sgOdBurst(e);   // Mika breaks out the moment she crosses into overdrive
     if (e.vicState && e.state !== e.vicState) e.vicState = null;   // its own code (or a hit) has taken over again
     if (e.vicState !== 'held') { e.preFace = e.face; e.preX = e.x; e.preDizzy = e.state === 'dizzy'; if (e.gInit || e.gLock) grabClear(e); }
     if (e.vicState === 'held') {
