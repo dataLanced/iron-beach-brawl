@@ -703,6 +703,7 @@ function grabClear(v) { v.gLock = null; v.gSq = 0; v.gHp = null; v.gInit = false
 function updateEnemy(e, dt) {
   // only a body being held or thrown is ever rotated: anything else standing up is drawn upright
   if (e.spin && e.state !== 'pheld' && e.state !== 'ptoss') e.spin = 0;
+  if (typeof beamReact === 'function' && game.watch && beamReact(e, dt)) return;   // a beam coming down her lane
   if (e.unrot > 0) { e.unrot -= dt; if (e.unrot <= 0) e.rot = 0; }
   if (e.state === 'pheld' || e.state === 'ptoss') return updatePHeld(e, dt);
   if (hero && hero.state === 'ko' && e.cls && e.cls !== 'punk' && !npcKOer(e) && !['ko', 'down', 'hurt'].includes(e.state) && !(e.delay > 0) && e.frames && e.frames.idle) { e.st += dt; npcStandDown(e, dt); return; }
@@ -5643,7 +5644,7 @@ const SG_BEAM_LEN = 820;
 function drawEnergyBeam(e) {
   // drawn inside her sprite transform (flips with her): from her palms, straight down her lane
   const fr = e.frames.blast[6], t = e.ebT, grow = Math.min(1, t / .1), fade = t > .72 ? Math.max(0, 1 - (t - .72) / .2) : 1;
-  const x0 = fr.hx, y0 = -fr.hy, L = SG_BEAM_LEN * grow, pul = 1 + Math.sin(game.t * 60) * .08;
+  const x0 = fr.hx, y0 = -fr.hy, L = e.ebClip != null ? e.ebClip / e.scale : SG_BEAM_LEN * grow, pul = 1 + Math.sin(game.t * 60) * .08;
   ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = fade;
   for (const [w, c] of [[64, 'rgba(200,20,20,.35)'], [44, 'rgba(255,70,40,.6)'], [26, 'rgba(255,170,90,.85)'], [11, 'rgba(255,250,230,1)']]) {
     const h = w * pul; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x0, y0 - h * .35);
@@ -11750,7 +11751,7 @@ function drGnpUpd(e, dt) {
 function updateDrone(e, dt) {
   const C = CY.drone;
   if (e.delay > 0) { e.delay -= dt; return; }
-  e.st += dt; e.ft += dt * 1000; tokTick(e); DR_CUR = e; if (e.state !== 'cloak') e.alpha = 1;
+  e.st += dt; e.ft += dt * 1000; tokTick(e); DR_CUR = e; if (e.bm && e.state !== 'sbeam') drBeamEnd(e); if (game.beams && game.beams.length > 8) game.beams = game.beams.filter(b => !b.dead); if (e.state !== 'cloak') e.alpha = 1;
   if (e.inv > 0 && e.inv < 90) e.inv -= dt;
   e.cd -= dt; e.dashcd -= dt; e.divecd -= dt; e.grabcd -= dt; e.uppercd = (e.uppercd || 0) - dt; e.pulsecd -= dt; e.gnpcd -= dt; e.guardcd -= dt; if (e.blockT > 0) e.blockT -= dt;
   if (e.adaptT > 0) { e.adaptT -= dt; if (e.adaptT <= 0) e.adapt = null; }
@@ -11959,6 +11960,9 @@ function drRoleAI(e, dt, adx, ady, dx) {
         if (Math.random() < dt * 10) drZap(e.x + (Math.random() - .5) * 50, e.y, 20 + Math.random() * 140, e.zcol);
         if (e.ocT <= 0) { e.zapP = DRROLE.silver.zap; e.speed = CY.drone.speed; }
       }
+      e.shotcd = (e.shotcd == null ? 2 : e.shotcd) - dt; e.bbcd = (e.bbcd == null ? 4 + Math.random() * 3 : e.bbcd) - dt;
+      if (e.cd <= 0 && e.bbcd <= 0 && free && hero.state !== 'down' && adx > 180 && adx < 760 && ady < 30 && Math.random() < dt * .8 && tokWant(e, 1)) { drBeamStart(e); return true; }
+      if (e.cd <= 0 && e.shotcd <= 0 && free && hero.state !== 'down' && adx > 200 && adx < 640 && ady < 22 && Math.random() < dt * 1.4) { drShotStart(e); return true; }
       if (!e.ocUsed && e.hp < e.maxHp * .6 && e.cd <= .3 && free && !['hurt', 'down'].includes(e.state)) { e.ocUsed = true; tokFree(e); drSet(e, 'ocharge'); return true; }
       if (e.cd <= 0 && e.tcCd <= 0 && free && hero.state !== 'down' && hero.z < 4 && adx > 110 && adx < 380 && ady < 30 && tokWant(e, 1)) { drSet(e, 'tcrash'); e.face = Math.sign(dx) || e.face; e.tcCd = 6 + Math.random() * 3; e.slammed = false; return true; }
       if (e.cd <= 0 && e.tauntCd <= 0 && free && adx > 240 && adx < 520 && Math.abs(hero.vx || 0) > 40 && Math.sign(hero.vx) === Math.sign(hero.x - e.x)) { drSet(e, 'taunt'); e.face = Math.sign(dx) || e.face; e.tauntCd = 10 + Math.random() * 5; return true; }
@@ -12005,6 +12009,8 @@ function drRoleUpd(e, dt) {
     if (t > .75) drEnd(e, .5);
     return true;
   }
+  if (S === 'sshot') { drShotUpd(e, dt); return true; }
+  if (S === 'sbeam') { drBeamUpd(e, dt); return true; }
   if (S === 'ocharge') {   // silver's power-up roar, once a fight when she's hurt
     e.vx = 0; e.vy = 0; e.ca = 'silver'; e.cfi = 1; e.inv = Math.max(e.inv, .1);
     if (Math.random() < .7) drZap(e.x + (Math.random() - .5) * 70, e.y, 10 + Math.random() * 150, e.zcol);
@@ -12154,6 +12160,222 @@ function drWave(e) {
     ctx.strokeStyle = `rgba(${fx.col},${a})`; ctx.lineWidth = 2.5;
     for (let k = 0; k < 3; k++) { let X = hx - fx.face * rnd() * 40, Y = fx.y; ctx.beginPath(); ctx.moveTo(X, Y); for (let i = 0; i < 3; i++) { X += (rnd() - .5) * 20; Y -= 14 + rnd() * 16; ctx.lineTo(X, Y); } ctx.stroke(); }
     ctx.restore(); } });
+}
+/* ---------- SILVER'S GAUNTLET CANNON, and how everyone else deals with it ----------
+   The little beam: a quick bolt down the lane (light damage, a short stun, sometimes two in a row).
+   The big beam: a long glowing charge (the tell), then a thick beam across the screen in her lane: ticks of damage and a
+   knockdown at the end. Every beam is registered in game.beams so the other fighters can see it coming:
+     everyone   - a chance to side-step out of the lane during the charge
+     Rose       - slips the little beam (her weave), side-steps the big one
+     Hanako     - plants and tanks it (sumo armour: less damage, no knockdown)
+     Satsuki    - guards (the beam grinds her guard meter down and can crush it)
+     Bobbie     - hops the little beam, ki-steps out of the big one
+     kunoichi   - hop the little beam; purple/black shadow-step out of the big one; gold substitutes with a log
+     OD Mika    - teleports out of the little beam; meets the big one with her own Overdrive Blast: a BEAM CLASH
+     drones     - side-step; blue guards it
+   (rows 'gcan' on the drone sheet: quick shot, recoil, charge, fire, vent - until drawn, stand-ins) */
+const DR_CAN_FB = [['jab', 1], ['jab', 1], ['pulse', 0], ['jab', 1], ['idle', 0]];
+function drCanF(e, i) { if (e.frames.gcan && e.frames.gcan[i]) { e.ca = 'gcan'; e.cfi = i; } else { e.ca = DR_CAN_FB[i][0]; e.cfi = DR_CAN_FB[i][1]; } }
+function drEmit(e) {   // where the gauntlet's core is: from the drawn frame when there is one
+  const f = e.frames[e.ca] && e.frames[e.ca][e.cfi];
+  if (f && f.hx != null) return { x: e.x + e.face * (f.hx - f.ax) * e.scale, z: (f.ay - f.hy) * e.scale };
+  return { x: e.x + e.face * 62 * e.scale / (CY.drone.height / 158) * .95, z: 104 };
+}
+function drBeamTargets(e) { return game.watch ? game.enemies.filter(o => o.team !== e.team && o.state !== 'ko' && !o.remove) : [hero]; }
+function drBeamCanHit(t) { if (t === hero || t === (hero && hero.__real)) return heroHittable() && hero.state !== 'held'; return !['ko', 'down', 'held'].includes(t.state) && !(t.inv > 0) && !t.hidden; }
+function beamsList() { if (!game.beams) game.beams = []; return game.beams; }
+
+// ---- the little beam ----
+function drShotStart(e) { drSet(e, 'sshot'); e.face = Math.sign(hero.x - e.x) || e.face; e.shots = Math.random() < .4 ? 2 : 1; e.shotN = 0; }
+function drShotUpd(e, dt) {
+  const t = e.st; e.vx = 0; e.vy = 0;
+  const per = .34, k = Math.floor(t / per), q = t - k * per;
+  if (k >= e.shots) { drEnd(e, .6); e.shotcd = 2.2 + Math.random() * 1.5; return; }
+  drCanF(e, q < .12 ? 0 : 1);
+  if (q >= .12 && e.shotN <= k) { e.shotN = k + 1; drBoltBeam(e); }
+}
+function drBoltBeam(e) {
+  const em = drEmit(e), dmg = Math.round(5 * CY.drone.dmg * e.dmgMul);
+  const b = { kind: 'small', o: e, x: em.x, y: e.y, z: em.z, vx: e.face * 900, t: 0, dead: false };
+  beamsList().push(b); audio.noise(.12, 3800, 'highpass', .25); drOrb(em.x, e.y, em.z, 22, .1);
+  game.fx.push({ k: 'drlbeam', x: b.x, y: b.y, t: 0, life: 1.2, b, col: e.zcol, draw(fx, sx) {
+    const b = fx.b; if (b.dead) { fx.life = fx.t; return; }
+    b.t = fx.t; const X = b.x + b.vx * fx.t; fx.x = X; sx = X - game.cam;
+    for (const tg of drBeamTargets(b.o)) {
+      if (!drBeamCanHit(tg) || Math.abs(tg.y - b.y) > 24 || Math.abs(tg.x - X) > 34 || (tg.z || 0) > b.z + 30) continue;
+      b.dead = true; fx.life = fx.t + .01; damage(tg, { dmg, kb: 90, reach: 999, stun: .35 }, b.o);
+      drZap(tg.x, tg.y, 90, fx.col); return;
+    }
+    const y = b.y - b.z, dir = Math.sign(b.vx);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+    for (const [w, a] of [[10, .35], [5, .8], [2, 1]]) { ctx.strokeStyle = a < 1 ? `rgba(${fx.col},${a})` : 'rgba(255,255,255,1)'; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(sx - dir * 70, y); ctx.lineTo(sx, y); ctx.stroke(); }
+    ctx.restore();
+    if (X < game.cam - 80 || X > game.cam + W + 80) { b.dead = true; fx.life = fx.t; }
+  } });
+}
+
+// ---- the big beam ----
+const DR_BEAM = { charge: .62, fire: .75, vent: .4, len: 900, tick: .12 };
+function drBeamStart(e) { drSet(e, 'sbeam'); e.face = Math.sign(hero.x - e.x) || e.face; e.bm = { kind: 'big', o: e, ph: 'charge', y: e.y, dir: e.face, t: 0, ticks: 0, tickT: 0, seen: new Set() }; beamsList().push(e.bm); audio.noise(.6, 900, 'bandpass', .25); }
+function drBeamUpd(e, dt) {
+  const b = e.bm; e.vx = 0; e.vy = 0;
+  if (!b) { drEnd(e, .5); return; }
+  b.t += dt; b.y = e.y; b.dir = e.face;
+  if (b.ph === 'charge') {
+    drCanF(e, 2); const em = drEmit(e); b.x0 = em.x; b.z = em.z;
+    if (Math.random() < .5) drZap(em.x, e.y, em.z, e.zcol);
+    if (!b.glow) { b.glow = true; game.fx.push({ k: 'drcharge', x: e.x, y: e.y, t: 0, life: 9, b, col: e.zcol, draw: drChargeDraw }); }
+    if (b.t > DR_BEAM.charge) { b.ph = 'fire'; b.t = 0; game.shake = Math.max(game.shake, 12); audio.thump(45, .5, .7); audio.noise(.8, 600, 'lowpass', .45);
+      game.fx.push({ k: 'tag', x: e.x, y: e.y - 210, t: 0, life: 1, txt: 'GAUNTLET CANNON!' }, { k: 'drbeam', x: e.x, y: e.y, t: 0, life: 9, b, col: e.zcol, draw: drBeamDraw }); }
+    return;
+  }
+  if (b.ph === 'fire' || b.ph === 'clash') {
+    drCanF(e, 3); const em = drEmit(e); b.x0 = em.x; b.z = em.z; game.shake = Math.max(game.shake, 3);
+    e.x -= e.face * 30 * dt;   // the recoil pushes her back
+    if (b.ph === 'fire') { const m = drClashFind(b); if (m) { b.ph = 'clash'; b.m = m; b.p = .5; b.ct = 0; b.seed = Math.random() * 9; game.fx.push({ k: 'tag', x: (e.x + m.x) / 2, y: e.y - 220, t: 0, life: 1.4, txt: 'BEAM CLASH!' }); } }
+    if (b.ph === 'clash') { drClashUpd(e, b, dt); return; }
+    b.len = Math.min(1, b.t / .08) * DR_BEAM.len; b.tickT -= dt;
+    if (b.tickT <= 0) {
+      b.tickT = DR_BEAM.tick; const last = b.t > DR_BEAM.fire - DR_BEAM.tick;
+      for (const tg of drBeamTargets(e)) {
+        const front = (tg.x - b.x0) * b.dir;
+        if (tg.cls === 'school' && tg.state === 'blast' && tg.face === -b.dir) continue;   // she's answering it: the clash decides
+        if (!drBeamCanHit(tg) || front < -10 || front > b.len || Math.abs(tg.y - b.y) > 28 || (tg.z || 0) > b.z + 40) continue;
+        drBeamHit(e, tg, last || (tg.bmHits = (tg.bmHits || 0) + 1) >= 5);
+      }
+    }
+    if (b.t > DR_BEAM.fire) { b.ph = 'vent'; b.t = 0; for (const tg of drBeamTargets(e)) tg.bmHits = 0; }
+    return;
+  }
+  drCanF(e, 4); b.len = 0;
+  if (Math.random() < .3) game.fx.push({ k: 'dust', x: e.x + e.face * 30, y: e.y - 90, vx: 0, t: 0, life: .5, r: 8 });
+  if (b.t > DR_BEAM.vent) { drBeamEnd(e); drEnd(e, .7); e.bbcd = 9 + Math.random() * 4; }
+}
+function drBeamEnd(e) { if (e.bm) { e.bm.dead = true; game.beams = beamsList().filter(x => x !== e.bm); e.bm = null; } }
+function drBeamHit(e, tg, big) {
+  const tank = tg.cls === 'sumo', dmg = Math.round((big ? 10 : 3) * CY.drone.dmg * e.dmgMul * (tank ? .7 : 1));
+  const hit = big && !tank ? { dmg, kb: 420, reach: 999, big: true, knock: true, launch: 300, stop: .12 } : { dmg, kb: tank ? 20 : 60, reach: 999, stop: .03 };
+  damage(tg, hit, e);
+  if (tank && big) game.fx.push({ k: 'tag', x: tg.x, y: tg.y - 200, t: 0, life: .8, txt: 'TANKED IT!' });
+  drZap(tg.x, tg.y, 80 + Math.random() * 50, e.zcol);
+  if (big) tg.bmHits = 0;
+}
+function drChargeDraw(fx, sx) {
+  const b = fx.b; if (b.dead || b.ph !== 'charge') { fx.life = fx.t; return; }
+  const q = Math.min(1, b.t / DR_BEAM.charge), x = b.x0 - game.cam, y = b.y - b.z, R = 10 + 34 * q + Math.sin(game.t * 40) * 3;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x, y, 0, x, y, R * 1.6); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.35, `rgba(${fx.col},.9)`); g.addColorStop(1, `rgba(${fx.col},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R * 1.6, 0, 7); ctx.fill();
+  for (let i = 0; i < 6; i++) { const a = game.t * 7 + i * 1.05, r = R * 2.8 * (1 - ((game.t * 2.5 + i / 6) % 1));
+    ctx.fillStyle = `rgba(${fx.col},.8)`; ctx.beginPath(); ctx.arc(x + Math.cos(a) * r, y + Math.sin(a) * r * .6, 2.5, 0, 7); ctx.fill(); }
+  // a faint line down the lane: the warning
+  ctx.strokeStyle = `rgba(${fx.col},${.15 + .25 * q})`; ctx.lineWidth = 2; ctx.setLineDash([10, 10]); ctx.beginPath(); ctx.moveTo(x, b.y - 4); ctx.lineTo(x + b.dir * DR_BEAM.len, b.y - 4); ctx.stroke(); ctx.setLineDash([]);
+  ctx.restore();
+}
+function drBeamDraw(fx, sx) {
+  const b = fx.b; if (b.dead || b.ph === 'charge') { fx.life = fx.t; return; }
+  if (b.ph === 'vent' || !b.len) return;
+  const x0 = b.x0 - game.cam, y = b.y - b.z, L = b.len, d = b.dir, pul = 1 + Math.sin(game.t * 55) * .08;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const [w, c] of [[58, `rgba(${fx.col},.25)`], [38, `rgba(${fx.col},.55)`], [22, `rgba(${fx.col},.85)`], [9, 'rgba(255,255,255,1)']]) {
+    const h = w * pul; ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x0, y - h * .3); ctx.lineTo(x0 + d * L, y - h / 2); ctx.lineTo(x0 + d * L, y + h / 2); ctx.lineTo(x0, y + h * .3); ctx.closePath(); ctx.fill();
+  }
+  for (let i = 0; i < 5; i++) { const ph = (game.t * 3.5 + i / 5) % 1, xx = x0 + d * ph * L, yy = y + Math.sin(i * 2.1 + game.t * 25) * 12;
+    ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx + d * 36, yy); ctx.stroke(); }
+  const g = ctx.createRadialGradient(x0, y, 0, x0, y, 46 * pul); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.4, `rgba(${fx.col},.8)`); g.addColorStop(1, `rgba(${fx.col},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x0, y, 46 * pul, 0, 7); ctx.fill();
+  if (b.ph === 'clash') {   // the meeting point: a white-hot flare
+    const cx = x0 + d * L, R = 50 + Math.sin(game.t * 30) * 10, g2 = ctx.createRadialGradient(cx, y, 0, cx, y, R * 1.6);
+    g2.addColorStop(0, 'rgba(255,255,255,1)'); g2.addColorStop(.35, 'rgba(255,220,180,.85)'); g2.addColorStop(1, 'rgba(255,120,60,0)');
+    ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(cx, y, R * 1.6, 0, 7); ctx.fill();
+    if (Math.random() < .5) drZap(b.x0 + d * L, b.y, b.z, fx.col);
+  }
+  ctx.restore();
+}
+
+// ---- the beam clash: Silver's beam meets Overdrive Mika's blast head on ----
+function drClashFind(b) {
+  return game.enemies.find(m => m.cls === 'school' && m.state === 'blast' && m.ebT != null && m.face === -b.dir && Math.abs(m.y - b.y) < 40
+    && (m.x - b.x0) * b.dir > 60 && (!game.watch || m.team !== b.o.team));
+}
+function drClashUpd(e, b, dt) {
+  const m = b.m;
+  if (!m || m.state !== 'blast' || m.ebT == null) { b.ph = 'fire'; b.t = Math.min(b.t, DR_BEAM.fire - .25); b.m = null; return; }
+  b.ct += dt; game.shake = Math.max(game.shake, 6);
+  m.hitDone = true; m.ft = Math.min(m.ft, 300); m.ebT = Math.min(m.ebT, .5); b.t = Math.min(b.t, .3);   // both hold their beams while it lasts
+  // the push: surges back and forth; Overdrive Mika is slightly stronger, a hurt Silver is weaker
+  const bias = .05 + (e.hp / e.maxHp - m.hp / m.maxHp) * .25;
+  b.p += (Math.sin(b.ct * 5 + b.seed) * .7 + (Math.random() - .5) * 1.6 - bias + (b.drift || (b.drift = (Math.random() - .5) * .5))) * dt * .7;
+  b.p = Math.max(0, Math.min(1, b.p));
+  const gap = Math.abs(m.x - b.x0), meet = gap * b.p;   // p: how far from Silver the beams meet (0 = in her face)
+  b.len = meet; m.ebClip = Math.max(0, gap - meet);
+  if (Math.random() < dt * 8) game.fx.push({ k: 'spark', x: b.x0 + b.dir * meet, y: b.y - b.z + 60, t: 0, life: .18, big: true });
+  if (b.p <= .04 || b.p >= .96 || b.ct > 2.4) {
+    const silverWins = b.ct > 2.4 ? b.p > .5 : b.p >= .96, loser = silverWins ? m : e, winner = silverWins ? e : m;
+    m.ebClip = null; m.hitDone = true;
+    game.fx.push({ k: 'tag', x: loser.x, y: loser.y - 220, t: 0, life: 1.2, txt: silverWins ? 'OVERPOWERED!' : 'BLASTED THROUGH!' });
+    game.fx.push({ k: 'powerring', x: loser.x, y: loser.y, t: 0, life: .6, col: silverWins ? e.zcol : '255,70,50' });
+    game.shake = 22; game.hitstop = .15; audio.thump(40, .6, .8);
+    damage(loser, { dmg: silverWins ? 16 : 22, kb: 560, reach: 999, big: true, knock: true, launch: 480, stop: .2 }, winner);
+    b.ph = 'vent'; b.t = 0; b.len = 0;
+    if (!silverWins) { /* Mika's blast carries on through */ }
+    else { m.ebT = .9; }
+  }
+}
+
+// ---- everyone else: seeing a beam coming ----
+function beamThreat(e) {
+  const L = game.beams; if (!L || !L.length || !game.watch) return null;
+  for (const b of L) {
+    if (b.dead || b.o === e || b.o.team === e.team) continue;
+    if (!game.enemies.includes(b.o)) { b.dead = true; continue; }   // left over from another fight
+    if (b.kind === 'small') {
+      const X = b.x + b.vx * b.t, ahead = (e.x - X) * Math.sign(b.vx);
+      if (ahead > 0 && ahead < 300 && Math.abs(e.y - b.y) < 30) return b;
+    } else if (b.ph === 'charge' || b.ph === 'fire') {
+      const front = (e.x - (b.x0 != null ? b.x0 : b.o.x)) * b.dir;
+      if (front > 0 && front < DR_BEAM.len && Math.abs(e.y - b.y) < 36) return b;
+    }
+  }
+  return null;
+}
+const BEAM_FREE = ['idle', 'walk', 'step', 'seq'];
+function beamReact(e, dt) {
+  if (e.bDodge) {   // a side-step in progress: slide out of the lane while her own code runs
+    e.bDodge.t -= dt; e.y = Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, e.y + e.bDodge.dir * 300 * dt)); if (e.bDodge.t <= 0) e.bDodge = null;
+  }
+  const b = beamThreat(e); if (!b) return false;
+  if (!b.seen) b.seen = new Set(); if (b.seen.has(e)) return false; b.seen.add(e);
+  if ((e.z || 0) > 0 || !['idle', 'walk', 'step'].includes(e.state)) return false;   // only from neutral
+  const big = b.kind === 'big', r = Math.random(), side = () => { e.bDodge = { t: .42, dir: e.y < (FLOOR_TOP + FLOOR_BOT) / 2 ? 1 : -1 }; };
+  const say = txt => game.fx.push({ k: 'tag', x: e.x, y: e.y - 190, t: 0, life: .7, txt });
+  switch (e.cls) {
+    case 'sumo': if (big) say('BRING IT!'); return false;                                  // plants and tanks it (see drBeamHit)
+    case 'satsuki': if (r < .75) { setState(e, 'nguard'); e.guardT = big ? 1.4 : .5; e.gImp = 0; e.gCtr = 9; e.gCtrDone = true; e.face = Math.sign(b.o.x - e.x) || e.face; if (e.gMeter == null) e.gMeter = GUARD_CFG.satsuki.max; return true; } break;
+    case 'boxer': if (!big && r < .7 && typeof bxWeave === 'function') { e.face = Math.sign(b.o.x - e.x) || e.face; bxWeave(e); e.inv = Math.max(e.inv || 0, .3); return true; } if (big && r < .7) { side(); return false; } break;
+    case 'bobbie': if (!big && r < .75) { bbStartJump(e, 0); return true; } if (big && r < .75) { side(); return false; } break;
+    case 'ninja':
+      if (e.rookie && typeof rkSet === 'function') {
+        if (!big && r < .7) { rkSet(e, 'rjump'); e.kick = false; e.hopAway = false; e.airborne = false; return true; }
+        if (big && rkGold(e) && e.frames.gsub && r < .75) { rkSet(e, 'gsubst'); e.face = Math.sign(b.o.x - e.x) || e.face; say('HMPH.'); return true; }
+        if (big && rkPurple(e) && r < .7) { rkSet(e, 'rshadow'); e.tpWhy = 'dodge'; return true; }
+        if (r < .5) { side(); return false; }
+      } else if (r < .5) { side(); return false; }
+      break;
+    case 'school':
+      if (e.od) {
+        if (big && e.frames.blast && r < .8) { e.face = Math.sign(b.o.x - e.x) || e.face; sgSet(e, 'blast'); e.si = 2; e.ft = 0; e.ebT = null; say('NOT A CHANCE!'); return true; }
+        if (!big && e.frames.tele && r < .7) { sgTeleport(e, 'ground'); return true; }
+      }
+      if (r < .5) { side(); return false; }
+      break;
+    case 'drone':
+      if (e.role === 'blue' && r < .75) { drSet(e, 'guard'); e.guardLen = big ? 1.4 : .5; e.face = Math.sign(b.o.x - e.x) || e.face; return true; }
+      if (r < .6) { side(); return false; }
+      break;
+    default: if (r < .5) { side(); return false; }
+  }
+  return false;
 }
 
 /* ---------- VERSUS: pick any opponent and variant, fight them in a single arena ---------- */
