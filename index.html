@@ -13275,7 +13275,7 @@ function vexDamaged(t, hit, att) {
     if (!game.watch) for (const o of game.enemies) if (o !== t && o.state !== 'ko') { o.hp = 0; setState(o, 'ko'); }
     return;
   }
-  if (!t.called && t.hp < t.maxHp * VX.callAt) t.wantCall = true;
+  if (!game.watch && !t.called && t.hp < t.maxHp * VX.callAt) t.wantCall = true;
   if (!t.oc && !t.pendingOC && t.hp < t.maxHp * VX.ocAt && VOFRAMES) { t.pendingOC = true; return; }
   if (t.state === 'tf' || t.state === 'call') return;   // super armour through the transformation and the squad call
   if (t.poise >= (t.poiseMax || C.poise) || (hit.knock && hit.big && hit.dmg >= 12) || t.z > 6) {
