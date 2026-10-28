@@ -1690,6 +1690,7 @@ function drawHUD() {
   }
 }
 function drawFX(fx) {
+  if (fx.t < 0) return;   // delayed effect (staggered rings etc.) hasn't started yet
   const p = fx.t / fx.life;
   if (fx.o) { fx.x = fx.o.x; fx.y = fx.o.y - (fx.o.z || 0); }   // effects that ride along with a fighter
   const sx = fx.x - game.cam;
@@ -13793,7 +13794,12 @@ function frame(now) {
     update(STEP); acc -= STEP; n++;
   }
   if (n === 6) acc = 0;   // a long stall (tab hidden): drop the backlog instead of fast-forwarding
-  render();
+  try { render(); } catch (err) {
+    // a draw bug must not freeze the game: reset the canvas state, log once, keep the loop running
+    for (let i = 0; i < 32; i++) ctx.restore();   // unwind any save() the failed draw left open (extra restores are no-ops)
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    if (!frame.err) { frame.err = 1; console.error(err); }
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
