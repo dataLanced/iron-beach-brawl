@@ -1285,7 +1285,7 @@ function physics(f, dt) {
       f.hp = Math.max(0, f.hp - dmg); f.flash = .15; game.hitstop = Math.max(game.hitstop, .1); game.shake = Math.max(game.shake, 14);
       audio.hit(true); audio.thump(55, .35, .55); dust(f.x, f.y, 10); game.comboCount = 0;
       game.fx.push({ k: 'num', x: f.x, y: f.y - 110, t: 0, life: .8, txt: dmg, foe: true });
-      if (f.hp <= 0) { setState(f, 'ko'); f.koT = 0; f.rot = 1; }
+      if (f.hp <= 0) { setState(f, 'ko'); f.koT = 0; f.rot = f.ownDown ? 0 : 1; }   // fighters with their own lying frame must not be tipped over as well
       else f.st = Math.min(f.st, .4);   // stays down a beat after the slam
     }
     if (f.z <= 0) { f.z = 0; if (f.vz < -150) { f.vz = -f.vz * .3; game.shake = Math.max(game.shake, 5); } else f.vz = 0; f.vx *= .82; }
@@ -12720,6 +12720,7 @@ function updateVex(e, dt) {
   }
   if (S === 'ko') {
     e.koT = (e.koT || 0) + dt; e.vx *= Math.pow(.1, dt); cyGravity(e, dt);
+    e.rot = 0; if (e.z <= 0) e.spin = 0;   // her own lying frame: never tipped or spun on top of it (a K.O. from a throw left her standing on end)
     e.ca = 'hurt'; e.cfi = (e.z > 6 || e.vz > 0) ? 2 : 3;
     if (!game.watch && !C.boss && e.koT > 1.8) e.remove = true;
     if (game.watch && e.koT > 2.2 && !e.boss) {}
@@ -12733,7 +12734,7 @@ function updateVex(e, dt) {
   }
   if (S === 'down') {
     // knocked through the air, flat on her back, up again (untouchable throughout)
-    e.vx *= Math.pow(.05, dt); cyGravity(e, dt);
+    e.vx *= Math.pow(.05, dt); cyGravity(e, dt); e.rot = 0; if (e.z <= 0) e.spin = 0;
     e.ca = 'hurt'; e.cfi = (e.z > 6 || e.vz > 0) ? 2 : e.st > 1.05 ? 4 : 3;
     if (e.cfi === 3 && !e.thudded) { e.thudded = true; game.shake = Math.max(game.shake, 8); dust(e.x, e.y, 8); }
     if (e.st > 1.45 && e.z <= 0) { e.inv = .4; e.thudded = false; vxSet(e, 'idle'); e.cd = .25; }
@@ -13749,7 +13750,7 @@ function updateNurse(e, dt) {
   const S = e.state;
   if (S === 'ko' || S === 'down') {
     // knocked through the air (2), flat on her back (3), getting up (4)
-    e.vx *= Math.pow(.06, dt); cyGravity(e, dt); e.ca = 'hurt'; e.sqx = 0; e.sqy = 0; e.rot = 0;
+    e.vx *= Math.pow(.06, dt); cyGravity(e, dt); e.ca = 'hurt'; e.sqx = 0; e.sqy = 0; e.rot = 0; if (e.z <= 0) e.spin = 0;
     if (e.z > 4 || e.vz > 0) e.cfi = 2;
     else {
       e.cfi = 3;
