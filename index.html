@@ -715,6 +715,7 @@ function updateEnemy(e, dt) {
   if (typeof beamClashTick === 'function' && game.watch) beamClashTick(dt);
   if (typeof beamReact === 'function' && game.watch && beamReact(e, dt)) return;   // a beam coming down her lane
   if (e.unrot > 0) { e.unrot -= dt; if (e.unrot <= 0) e.rot = 0; }
+  if (e.cls === 'vex') { e.ocHT = e.state === 'pheld' ? (e.ocHT || 0) + dt : 0; if (e.oc && e.ocHT > .35 && typeof vxOcBreak === 'function' && vxOcBreak(e)) return; }   // Overclock Vex blasts out of the player's grab
   if (e.state === 'pheld' || e.state === 'ptoss') return updatePHeld(e, dt);
   if (hero && hero.state === 'ko' && e.cls && e.cls !== 'punk' && !npcKOer(e) && !['ko', 'down', 'hurt'].includes(e.state) && !(e.delay > 0) && e.frames && e.frames.idle) { e.st += dt; npcStandDown(e, dt); return; }
   if (e.cls === 'ninja') return updateNinja(e, dt);
@@ -12767,17 +12768,26 @@ function updateVex(e, dt) {
   const busy = hero.state === 'held' || (hero.state === 'down' && !(hero.z > 10)) || hero.state === 'ko';
   idleFrame();
   if (!busy && e.cd <= 0) {
-    // Overclock specials first
-    if (e.oc && e.fbeamcd <= 0 && adx > 220 && Math.random() < dt * 2.2) { vxStartBeam(e, true); return; }
-    if (e.oc && e.blinkcd <= 0 && adx < 520 && Math.random() < dt * 2.5) { vxStartBlink(e); return; }
-    if (e.beamcd <= 0 && adx > 240 && ady < 30 && Math.random() < dt * 1.6) { vxStartBeam(e, false); return; }
-    if (e.dashcd <= 0 && adx > 200 && adx < 560 && ady < 26 && Math.random() < dt * 1.8) { vxStartDash(e); return; }
-    if (e.divecd <= 0 && adx > 150 && adx < 460 && Math.random() < dt * 1.2) { vxStartDive(e); return; }
-    if (e.grabcd <= 0 && adx < 95 && ady < 18 && hero.z < 4 && Math.random() < .35) { vxStartGrab(e, false); return; }
-    if (adx < 120 && ady < 22) { vxStartString(e); return; }
+    // pick from everything she has ready, weighted (Overclock leans on its own specials); up close she still
+    // sometimes backs off to make room for a beam, a rocket punch or a dive instead of always opening with the string
+    const close = adx < 120 && ady < 22, opts = [];
+    if (e.oc && e.fbeamcd <= 0 && adx > 160) opts.push([3, () => vxStartBeam(e, true)]);
+    if (e.oc && e.blinkcd <= 0 && adx < 560) opts.push([3.2, () => vxStartBlink(e)]);
+    if (e.beamcd <= 0 && adx > 200 && ady < 30) opts.push([e.oc ? 1 : 1.6, () => vxStartBeam(e, false)]);
+    if (e.dashcd <= 0 && adx > 180 && adx < 560 && ady < 26) opts.push([2.2, () => vxStartDash(e)]);
+    if (e.divecd <= 0 && adx > 120 && adx < 460) opts.push([1.6, () => vxStartDive(e)]);
+    if (e.grabcd <= 0 && adx < 95 && ady < 18 && hero.z < 4) opts.push([1.4, () => vxStartGrab(e, false)]);
+    if (close) opts.push([e.oc ? 2.2 : 3, () => vxStartString(e)]);
+    if (close && !(e.spaceT > 0) && (e.dashcd <= 0 || e.divecd <= 0 || e.beamcd <= 0 || (e.oc && e.fbeamcd <= 0))) opts.push([1, () => { e.spaceT = .6; e.cd = .15; }]);
+    if (opts.length && (close || Math.random() < dt * 3)) {
+      let r = Math.random() * opts.reduce((a, o) => a + o[0], 0);
+      for (const [w, go] of opts) { r -= w; if (r <= 0) { go(); break; } }
+      if (e.state !== 'idle') return;
+    }
   }
   // close the distance (she walks in when ready to strike, otherwise circles at her spacing, lined up on the lane)
-  const want = e.cd <= .35 ? 92 : e.off;
+  if (e.spaceT > 0) e.spaceT -= dt;
+  const want = e.spaceT > 0 ? 270 : e.cd <= .35 ? 92 : e.off;
   const mx = adx - want;
   e.vx = Math.abs(mx) > 10 ? Math.sign(dx) * Math.sign(mx) * e.speed * (e.oc ? 1.35 : 1) * (adx > 360 ? 1.4 : 1) : 0;
   e.vy = ady > 6 ? Math.sign(dy) * e.speed * .6 * (e.oc ? 1.2 : 1) : 0;
@@ -12920,7 +12930,7 @@ const VX_BEAM = { charge: .62, fire: .85, rec: .32, tick: .13, len: 980, lane: 2
 const VX_FBEAM = { charge: .8, fire: 1.15, rec: .5, tick: .12, len: 1100, lane: 88 };
 function vxStartBeam(e, full) {
   vxSet(e, full ? 'fbeam' : 'beam'); e.face = Math.sign(hero.x - e.x) || e.face; e.bTick = 0; e.beamLen = 0; e.clashLen = null;
-  if (full) e.fbeamcd = 9 + Math.random() * 4; else e.beamcd = (e.oc ? 6 : 8) + Math.random() * 3;
+  if (full) e.fbeamcd = 6 + Math.random() * 3; else e.beamcd = (e.oc ? 6 : 8) + Math.random() * 3;
   audio.noise(.3, 600, 'bandpass', .25);
   if (full) { game.banner = { text: 'FULL POWER', sub: 'OVERCLOCK BEAM', t: 1.2 }; }
 }
@@ -13126,7 +13136,21 @@ function vxTf(e, dt) {
   e.ca = 'tf'; e.cfi = t < .55 ? 0 : t < .85 ? 1 : 2;
   if (Math.random() < dt * 16) vxZap(e, 2);
   if (t > .55 && t < .6 && !e.snd) { e.snd = true; vxTag('HA... HAHA.', e.x, e.y - 230, 1); }
-  if (t > 1.35) { vxSet(e, 'idle'); e.inv = .3; e.cd = .3; e.blinkcd = .8; }
+  if (t > 1.35) { vxSet(e, 'idle'); e.inv = .3; e.cd = .3; e.blinkcd = .8; e.fbeamcd = 2; }
+}
+// Overclock: a hold doesn't keep her for long - the suit discharges and blows the holder (and anyone close) away
+function vxOcBreak(e) {
+  if (!e.oc || e.state === 'ko' || (e.breakcd || 0) > game.t) return false;
+  e.breakcd = game.t + 5;
+  const h = e.heldBy;
+  if (h) { if (h.holding) h.holding = null; if (h.state !== 'ko') { setState(h, 'hurt'); h.stun = .5; } }
+  if (e.state === 'pheld' && hero && hero.grabbed === e && typeof p2Release === 'function') p2Release(hero);
+  e.heldBy = null; e.vicState = null; e.spin = 0; e.rot = 0; e.escape = 0; e.z = 0;
+  vxSet(e, 'idle'); e.inv = .4; e.cd = .25;
+  game.shake = Math.max(game.shake, 12); audio.thump(60, .3, .5); audio.noise(.4, 900, 'bandpass', .35);
+  game.fx.push({ k: 'powerring', x: e.x, y: e.y, t: 0, life: .5, col: VX.ocCol }); vxZap(e, 4);
+  vxOcBlast(e, false); vxTag('OVERLOAD!', e.x, e.y - 220, .9);
+  return true;
 }
 function vxOcBlast(e, big) {
   const foes = game.watch ? game.enemies.filter(o => o.team !== e.team && o.state !== 'ko' && !o.remove) : [hero];
@@ -13155,7 +13179,7 @@ const VX_BLINK = [
   { f: 3, side: 1, z: 0, dmg: 8, txt: null, act: .2, box: [.55, .85, 80] },
   { f: 4, side: -1, z: 0, dmg: 13, txt: 'BLINK BARRAGE!', act: .32, box: [.45, 1, 70], launch: true },
 ];
-function vxStartBlink(e) { vxSet(e, 'blink'); e.bi = -1; e.biT = 0; e.blinkcd = 6 + Math.random() * 3; e.face = Math.sign(hero.x - e.x) || e.face; audio.noise(.15, 2600, 'highpass', .25); }
+function vxStartBlink(e) { vxSet(e, 'blink'); e.bi = -1; e.biT = 0; e.blinkcd = 3.5 + Math.random() * 2; e.face = Math.sign(hero.x - e.x) || e.face; audio.noise(.15, 2600, 'highpass', .25); }
 function vxBlink(e, dt) {
   e.biT += dt; e.vy = 0;
   if (e.bi === -1) {   // crouch, then vanish
@@ -14269,6 +14293,7 @@ function watchStep(dt) {
         wBackUp(e);
       }
       else {
+        if (e.cls === 'vex' && e.oc && e.st > .35 && typeof vxOcBreak === 'function' && vxOcBreak(e)) continue;   // Overclock Vex blasts out of holds
         // struggle: the AI mashes to break free (grab locks apply: back grab, dizzy, three squeezes)
         if (!e.gInit) { e.gInit = true; grabLockAt(e, h, e.preFace ?? e.face, e.preX ?? e.x, !!e.preDizzy); }
         grabTick(e);
