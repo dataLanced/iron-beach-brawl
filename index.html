@@ -10467,14 +10467,13 @@ function slFrame(f) {
    Strings (punch / kick, with branches): jab, cross, elbow, rising up kick · after the cross, kick: knee to the gut,
    headbutt · kick string: low shin, front stomp kick, spinning back kick · after two kicks, punch: spinning backfist.
    Context: punch with a foe lying at her feet = stomp; punch with a foe behind her and nobody in front = back elbow.
-   Double-tap toward: dash (its start DEFLECTS a strike from the front) into a run · run + punch: haymaker (early) or
+   Double-tap toward: dash into a run · run + punch: haymaker (early) or
    clothesline · run + kick: dropkick · down + kick: baseball slide · double-tap up / down: lane dodge.
    Jump: kick = flying knee, punch = double axe-handle, down + attack = TORPEDO DIVE (lands on a foe on the floor).
    Grab (walk into a foe): punch = knees then a headbutt, kick = shove + kick (the body bowls into others),
    toward + punch = Russian leg sweep, away + punch = shoulder throw, down + punch = DDT, toward + kick = suplex,
    jump = vault over to her back; from behind: punch = German suplex, kick = rear knee + shove, jump = vault back.
-   Defense: PARRY = tap toward an attack just as it lands · deflect dash · lane dodge · CLASH = start a special into a
-   hit (the special wins, free) · TECH ROLL = jump as she hits the floor.
+   Defense: PARRY = tap toward an attack just as it lands · lane dodge (one lane) · TECH ROLL = jump as she hits the floor.
    Specials (punch + jump together): escape burst (works while being hit or held), toward: rush flurry,
    up: tornado uppercut. Kick + jump: SCARLETT FURY (one star per life). A full special meter pays for a special;
    otherwise it costs health, which she wins back (the green part of the bar) by landing hits before she's hit.
@@ -10552,9 +10551,7 @@ function slDefend(h, hit, att) {
   if (!att || hit.dmg <= 0) return false;
   const dir = Math.sign((att.x || h.x) - h.x) || -h.face, key = dir > 0 ? 'R' : 'L';
   let kind = null;
-  if (h.slClash > 0) kind = 'CLASH!';
-  else if (h.state === 'slrun' && h.st < .2 && dir === h.face) kind = 'DEFLECT!';
-  else if (['idle', 'slrun', 'slland'].includes(h.state) && !(h.z > 0) && h.tapT && game.t - (h.tapT[key] || -9) < .18) kind = 'PARRY!';
+  if (['idle', 'slrun', 'slland'].includes(h.state) && !(h.z > 0) && h.tapT && game.t - (h.tapT[key] || -9) < .18) kind = 'PARRY!';
   if (!kind) return false;
   slStagger(att, kind === 'PARRY!' ? .6 : .45);
   game.hitstop = Math.max(game.hitstop, .12); game.shake = Math.max(game.shake, 6);
@@ -10563,7 +10560,6 @@ function slDefend(h, hit, att) {
   game.fx.push({ k: 'powerring', x: h.x + dir * 30, y: h.y, t: 0, life: .3, col: '255,240,170' });
   slTag(kind, h.x, h.y - 195, .8);
   if (kind === 'PARRY!') { h.face = dir; slSet(h, 'slparry'); slF(h, 'parry'); slGain(h, 20); h.inv = Math.max(h.inv || 0, .2); }
-  if (kind === 'CLASH!' && h.slPaid) { h.hp = Math.min(h.maxHp, h.hp + h.slPaid); h.slRec = Math.max(0, (h.slRec || 0) - h.slPaid); h.slPaid = 0; }
   return true;
 }
 
@@ -10688,7 +10684,9 @@ function slUpdate(h, dt) {
   switch (S) {
     case 'slatk': slStepUpd(h, dt); return true;
     case 'slrun': return slRunUpd(h, dt);
-    case 'sldodge': slF(h, 'dodge'); h.vx *= .9; if (h.st > .24) slSet(h, 'idle'); return true;
+    case 'sldodge': slF(h, 'dodge'); h.vx *= .9; h.vy = 0;
+      h.y += (h.slDodgeTo - h.y) * Math.min(1, dt * 18); h.y = Math.max(FLOOR_TOP, Math.min(FLOOR_BOT, h.y));
+      if (h.st > .22) slSet(h, 'idle'); return true;
     case 'sljump': slJumpUpd(h, dt); return true;
     case 'slland': slF(h, h.slTorp ? 'torp' : 'jump', h.slTorp ? 1 : 0); h.vx *= .7; h.vy = 0; jumpQueued = false; if (h.st > (h.slTorp ? .42 : .12)) { h.slTorp = false; slSet(h, 'idle'); } return true;
     case 'slgrab': case 'slback': case 'slgact': slGrabUpd(h, dt); return true;
@@ -10722,7 +10720,7 @@ function slNeutral(h, dt) {
   // double taps: toward = dash / run, up / down = lane dodge
   if (h.dbl && game.t - h.dblT < .05) {
     const d = h.dbl; h.dbl = null;
-    if (d === 'U' || d === 'D') { slSet(h, 'sldodge'); h.vy = (d === 'U' ? -1 : 1) * 560; h.vx = mx * h.speed * .4; audio.whiff(); dust(h.x, h.y, 3); return true; }
+    if (d === 'U' || d === 'D') { slSet(h, 'sldodge'); h.slDodgeTo = h.y + (d === 'U' ? -1 : 1) * 40; h.vy = 0; h.vx = mx * h.speed * .4; audio.whiff(); dust(h.x, h.y, 3); return true; }
     if ((d === 'R' ? 1 : -1) === h.face) { slSet(h, 'slrun'); h.slRunIdle = 0; audio.noise(.1, 600, 'lowpass', .2); dust(h.x - h.face * 20, h.y, 4); return true; }
   }
   if (jumpQueued) {
