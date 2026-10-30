@@ -1001,7 +1001,7 @@ function updateEnemy(e, dt) {
   }
   if (e.ai.mode === 'press' && e.ai.cd <= 0 && lined && (!e.ai.flank || behind || e.ai.cd < -1.5)) {
     const grab = (behind && T.grab > 0) || (Math.random() < T.grab * (1 + 2.2 * (typeof slgGuarding === 'function' && slgGuarding() ? 1 : 0) + (typeof slgHab === 'function' ? slgHab() : 0)) && hero.state !== 'held');   // guarding invites the grab
-    setState(e, grab ? 'grab' : ((e.power || 0) >= 1 || e.tier === 'red' || e.tier === 'metal') && Math.random() < .55 ? 'combo' : 'knee'); e.vx = 0; e.vy = 0;
+    setState(e, grab ? 'grab' : ((e.power || 0) >= 1 || e.tier === 'red' || e.tier === 'metal') && Math.random() < .55 * (1 - .8 * (typeof slgHab === 'function' ? slgHab() : 0)) ? 'combo' : 'knee');   // a guarding player gets the heavy knee more e.vx = 0; e.vy = 0;
   } else if (e.ai.mode === 'circle' && Math.abs(dx) < 10 && Math.abs(dy) < 8) {
     e.vx = 0; e.vy = 0; e.anim = 'idle';
     // waiting her turn at a distance: sometimes she taunts
@@ -6875,16 +6875,18 @@ function updateSchool(e, dt) {
       }
       sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.chain = !!(e.od && e.frames.chain && Math.random() < .5);
       // base: a quick jab when they're swinging at her (or now and then to poke), otherwise the confirmed string
-      if (!e.od && !e.chain && ((MOVES[hero.state] && Math.random() < .7) || Math.random() < .3)) e.pk = 'jab';
+      const gh = typeof slgHab === 'function' ? slgHab() : 0;
+      if (!e.od && !e.chain && gh > .2 && Math.random() < .35 + gh * .5) e.pk = Math.random() < .6 ? 'str' : 'k';   // a guard gets her heavies
+      else if (!e.od && !e.chain && ((MOVES[hero.state] && Math.random() < .7) || Math.random() < .3)) e.pk = 'jab';
       else if (!e.od && !e.chain && Math.random() < .4) e.pk = 'k';
       return;
     }
     // base: the raw ki punch - plants just outside punch range and charges it in plain view, then lunges
     if (e.frames.kipunch && e.cd <= 0 && e.kpcd <= 0 && adx >= 120 && adx < 260 && ady < 20 && hero.state !== 'block' && heroHittable()
-        && Math.random() < dt * 1.5) { sgStartKi(e, true); return; }
+        && Math.random() < dt * 1.5 * (1 + 2 * (typeof slgHab === 'function' ? slgHab() : 0))) { sgStartKi(e, true); return; }
     // base: the power straight from just outside jab range, or onto someone stuck recovering
     if (!e.od && e.cd <= 0 && (e.strcd || 0) <= 0 && adx >= 100 && adx < 175 && ady < 20 && hero.state !== 'block'
-        && (hero.state === 'hurt' || Math.random() < dt * 1.6)) { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'str'; e.face = Math.sign(dx) || e.face; e.strcd = 2.5 + Math.random() * 2; return; }
+        && (hero.state === 'hurt' || Math.random() < dt * 1.6 * (1 + 2.5 * (typeof slgHab === 'function' ? slgHab() : 0)))) { sgSet(e, 'punch'); e.si = 0; e.siT = -1; e.pk = 'str'; e.face = Math.sign(dx) || e.face; e.strcd = 2.5 + Math.random() * 2; return; }
   }
   // getting there: when she's far off in her lane she dashes to close the gap instead of trudging over (a plain
   // gap-closer, short cooldown; the attacking dash keeps its own longer one)
@@ -10745,9 +10747,9 @@ function slNeutral(h, dt) {
     slStart(h, k === 'punch' ? 'p0' : 'k0'); return true;
   }
   // walk into a foe to grab her
-  const tgt = mx ? game.enemies.find(e => p2Grabbable(e) && Math.abs(e.y - h.y) < 18 && (e.x - h.x) * mx > 20 && Math.abs(e.x - h.x) < 92) : null;
+  const tgt = mx ? game.enemies.find(e => slGrabbable(e) && Math.abs(e.y - h.y) < 26 && (e.x - h.x) * mx > 10 && Math.abs(e.x - h.x) < 100) : null;
   h.pushT = tgt ? (h.pushT || 0) + dt : 0;
-  if (tgt && h.pushT > .16) { slGrabStart(h, tgt); return true; }
+  if (tgt && (h.pushT > .06 || Math.abs(tgt.x - h.x) < 72)) { slGrabStart(h, tgt); return true; }   // bump into her and she is caught
   return true;
 }
 
@@ -10823,6 +10825,14 @@ function slJumpUpd(h, dt) {
 }
 
 // ---------- grabs ----------
+// who she can take hold of by walking in: anyone on her feet and not mid-attack - standing, walking, stepping,
+// guarding, reeling from a hit (not knocked flat) or dizzy
+function slGrabbable(e) {
+  if (p2Grabbable(e)) return true;
+  if (!['idle', 'walk', 'step', 'hurt', 'dizzy', 'nguard', 'backwalk'].includes(e.state)) return false;
+  return !(e.delay > 0) && e.hp > 0 && !(e.z > 1) && !e.holding && !(e.inv > 0) && e.targetX == null && !(e.rot >= .5) && !e.flung
+    && e.cls !== 'sumo' && e.cls !== 'vex' && !(e.cls === 'school' && e.od) && !e.hidden;
+}
 function slGrabStart(h, e) {
   slSet(h, 'slgrab'); h.slGrab = e; h.ghits = 0; h.vx = 0; h.vy = 0; h.pushT = 0; h.slV = { dx: 60, pose: 0 };
   grabLockAt(e, h, e.face, e.x, false);
@@ -11102,6 +11112,7 @@ function slgDrain(hit, att) {
   else k = 1;
   let d = (hit.dmg * 2 + (hit.big ? 12 : 0)) * k;
   if (a && a.cls && hit.big) d *= 1.4;   // their heavies are guard crushers
+  if (a && a.cls) d *= 1 + .8 * slgHab();   // once they've read the guard, they put their weight into every hit
   return d;
 }
 function slgBlock(h, hit, att) {
