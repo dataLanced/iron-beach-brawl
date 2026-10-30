@@ -1,10 +1,16 @@
 # Roadmap (agreed with the user)
 
-## Now
-- Scarlett player kit (street brawler): sheets A, B in; fix sheet (clothesline, back elbow), sheet C (grabs + vault,
-  Bear Hug Lift / Bridge Suplex pose refs), Russian leg sweep sheet, then jumps/slide, specials, defense, victories.
-  Defense: parry (tap toward), deflect dash, lane dodge, clash, tech roll. Specials: meter, or health when empty
-  (green sliver earned back). Vault: jump in a grab vaults over; from behind P = German suplex, K = rear knee + shove.
+## Done (Oct 30)
+- Scarlett full player kit (strings, runs, jumps, 10 grabs incl. vault, specials, meter, parry, dodge, tech roll,
+  intro / taunt / victories) and her guard (hold G: meter, break, counters from behind, locked guard-grabs).
+- Enemies vs guard: grunts flank, grapplers grab more, named fighters cut strings short and favour heavies.
+- Mobile layout (true 16:9, overlay controls in landscape), S (kick + jump) and G (guard) buttons.
+- Clash and deflect removed by request; dodge = one lane.
+
+## Open
+- Guard-aware grab/heavy choices for the rest of the named cast (Satsuki, Nurse, Vex, ...); only Mika and the
+  twin-tails choose differently so far (the rest drain the guard harder once they've read it).
+- Optional: a stronger heavy-block frame (box 4 of the guard sheet, skidding back further).
 
 ## Next: GRAB POLISH PASS (user approved)
 1. Contact points per grab frame (grabber hands) and per victim pose (neck / waist / shoulders); victim snapped so
