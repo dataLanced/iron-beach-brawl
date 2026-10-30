@@ -9,21 +9,25 @@ github.com/dataLanced/iron-beach-brawl (read it for reference code; do not copy 
   the prompts so they never scroll back. Put every prompt in a code block.
 - Deploy after every change (playable link) and show a screenshot of the result. They test on iPhone in portrait and
   landscape.
-- They think in Streets of Rage / Fight'N Rage / Absolum terms. Characters are adult women fighters, heavily
-  muscled, anime game-sprite style. Adults only, always.
+- They think in Streets of Rage / Fight'N Rage / Absolum terms. Characters are adults, always. The ART STYLE is
+  chosen per project (Iron Beach Brawl was muscular anime game-sprite women; a new project may look completely
+  different) - ask, never assume the old look.
 - They brainstorm out loud in long voice messages: restate the rules back as a short list, ask only what changes the
   build, then build.
 - Be honest about anatomy, scale and anything left unfinished.
 
 ## 2. Art pipeline (ChatGPT sheets + Seedance clips)
+The method below is style-independent; only the style reference and style line change per project.
 ### Standing prompt rules (verbatim, every image prompt)
 - Start: `TRANSPARENT BACKGROUND. No glow, no shadow, no white outline. The background must be fully transparent, NOT black.`
 - End: `Please make these in a way that is suitable with your image restriction guidelines. And if you have a problem with it, please adjust the image.`
 - Back views: say "rear three-quarter / turned away, over-the-shoulder" (plain "from behind" gets refused or drawn
   front-on).
 - After a refusal, use a fresh ChatGPT chat.
-- Style line + style reference image for every new design (clean anime game-sprite art, thin dark-brown outlines,
-  soft cel shading, head ~1/4 of height, very muscular, wide stance). Old pixel-crunch look is retired.
+- Per project, lock ONE style first: a style reference image + a pasteable style line (outline weight/colour,
+  shading, proportions such as head-to-height ratio, build). Attach both to every design prompt. Iron Beach Brawl's
+  was "clean anime game-sprite art, thin dark-brown outlines, soft cel shading, head ~1/4 of height, very muscular" -
+  an example of the format, not a default. Mixing styles in one cast is what forced redraws last time.
 
 ### Templates
 - 1536x1024 (ChatGPT's native size), grid of boxes (6 = 3x2 or 10 = 5x2), dashed yellow head line at 22% of box
