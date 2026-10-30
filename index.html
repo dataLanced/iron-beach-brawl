@@ -55,7 +55,8 @@ canvas { display: block; width: 100%; height: 100%; image-rendering: auto; }
 #bT { width: 64px; height: 36px; font-size: 11px; align-self: flex-start; }
 #bK { width: 80px; height: 80px; border-radius: 50%; background: #5b8cff; border-color: #a9c2ff; font-family: var(--display); font-size: 14px; color: var(--ink); align-self: flex-end; }
 #bJ { width: 64px; height: 64px; border-radius: 50%; background: #52c46a; border-color: #a6efb4; font-family: var(--display); font-size: 12px; color: var(--ink); align-self: flex-end; }
-#bP.on, #bK.on, #bJ.on { background: var(--sun); }
+#bS { width: 52px; height: 52px; border-radius: 50%; background: #c46ae0; border-color: #ecb6ff; font-family: var(--display); font-size: 16px; color: var(--ink); align-self: flex-start; }
+#bP.on, #bK.on, #bJ.on, #bS.on { background: var(--sun); }
 .atk { display: flex; gap: 12px; align-items: flex-start; }
 button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { #stage { box-shadow: 0 0 0 3px var(--panel); } }
@@ -65,13 +66,14 @@ button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
   /* portrait: title on its own row, d-pad left, buttons right, all scaled to the width */
   @media (orientation: portrait) {
     #stage { width: 100%; height: auto; }
-    #pad { display: grid; grid-template-columns: auto 1fr; grid-template-areas: "t t" "d a"; row-gap: 10px; column-gap: 8px; }
+    #pad { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "t t s" "d a a"; row-gap: 10px; column-gap: 8px; }
     #bT { grid-area: t; justify-self: center; align-self: center; }
     .dpad { grid-area: d; grid-template-columns: repeat(3, min(52px, 11vw)); grid-template-rows: repeat(3, min(52px, 11vw)); }
     .atk { grid-area: a; justify-self: end; gap: min(12px, 2vw); }
     #bP { width: min(96px, 19vw); height: min(96px, 19vw); }
     #bK { width: min(80px, 16vw); height: min(80px, 16vw); }
     #bJ { width: min(64px, 13vw); height: min(64px, 13vw); }
+    #bS { grid-area: s; justify-self: end; align-self: end; width: min(56px, 13vw); height: min(56px, 13vw); }
   }
   /* landscape: the screen takes the full height; controls float over its lower corners */
   @media (orientation: landscape) {
@@ -85,6 +87,7 @@ button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
     #bP { width: min(96px, 22dvh); height: min(96px, 22dvh); }
     #bK { width: min(80px, 19dvh); height: min(80px, 19dvh); }
     #bJ { width: min(64px, 15dvh); height: min(64px, 15dvh); }
+    #bS { width: min(52px, 12dvh); height: min(52px, 12dvh); align-self: flex-end; margin: 0 4px 12dvh auto; }
   }
 }
 </style>
@@ -99,6 +102,7 @@ button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
   <span><b>TAP AGAIN</b> TO EXTEND, MIX FOR STRINGS</span>
   <span><b>MASH</b> TO BREAK A GRAB</span>
   <span><b>FACE THEM</b> OR GET SUPLEXED</span>
+  <span><b>B / ;</b> SPECIAL (KICK + JUMP)</span>
   <span><b>P</b> PAUSE</span>
   <span><b>ENTER</b> START · <b>◀ ▶</b> PICK FIGHTER</span>
   <span><b>V</b> VERSUS</span>
@@ -113,6 +117,7 @@ button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
     <button class="pbtn" id="bD" aria-label="Down">▼</button>
   </div>
   <button class="pbtn" id="bT" aria-label="Back to title screen">TITLE</button>
+  <button class="pbtn" id="bS" aria-label="Special (kick + jump)">S</button>
   <div class="atk">
     <button class="pbtn" id="bJ" aria-label="Jump">JUMP</button>
     <button class="pbtn" id="bK" aria-label="Kick">KICK</button>
@@ -263,6 +268,7 @@ addEventListener('keydown', e => {
   if (['l', 'L', 'c', 'C', 'Shift'].includes(e.key)) { if (!e.repeat) pressJump(); e.preventDefault(); }
   if (['j', 'J', 'z', 'Z', ' '].includes(e.key)) { if (!e.repeat) pressAttack('punch'); e.preventDefault(); }
   if (['k', 'K', 'x', 'X'].includes(e.key)) { if (!e.repeat) pressAttack('kick'); e.preventDefault(); }
+  if ([';', 'b', 'B'].includes(e.key) && game.mode === 'play') { if (!e.repeat) { pressAttack('kick'); pressJump(); } e.preventDefault(); }   // special shortcut = kick + jump
   if (e.key === 'Enter') { startOrRestart(); e.preventDefault(); }
   if (e.key === 'F2' || e.key === '`') { game.showBoxes = !game.showBoxes; e.preventDefault(); }   // debug: draw hurtboxes / hitboxes
   if (e.key === 'p' || e.key === 'P') { if (game.mode === 'play' || game.mode === 'pause') game.mode = game.mode === 'play' ? 'pause' : 'play'; }
@@ -310,9 +316,9 @@ for (const [id, k] of [['bU', 'U'], ['bL', 'L'], ['bR', 'R'], ['bD', 'D']]) {
   el.addEventListener('pointerdown', on); el.addEventListener('pointerup', off);
   el.addEventListener('pointercancel', off); el.addEventListener('pointerleave', off);
 }
-for (const [id, kind] of [['bP', 'punch'], ['bK', 'kick'], ['bJ', 'jump']]) {
+for (const [id, kind] of [['bP', 'punch'], ['bK', 'kick'], ['bJ', 'jump'], ['bS', 'special']]) {
   const el = document.getElementById(id); if (!el) continue;
-  el.addEventListener('pointerdown', e => { e.preventDefault(); el.classList.add('on'); if (kind === 'jump') pressJump(); else pressAttack(kind); });
+  el.addEventListener('pointerdown', e => { e.preventDefault(); el.classList.add('on'); if (kind === 'jump') pressJump(); else if (kind === 'special') { pressAttack('kick'); pressJump(); } else pressAttack(kind); });
   const off = () => el.classList.remove('on');
   el.addEventListener('pointerup', off); el.addEventListener('pointerleave', off); el.addEventListener('pointercancel', off);
 }
