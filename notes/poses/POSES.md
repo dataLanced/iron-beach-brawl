@@ -25,3 +25,12 @@ character's own template, and attach the reference image as a POSE REFERENCE ONL
   "REAR JUMP KICK, rear three-quarter view: in the air, turned away from the viewer so we see mostly the back of her
   [loose top] and the back of her head, only the edge of her cheek visible. One leg kicking out to the right at head
   height, the other leg tucked under her, arms out to the sides for balance. Fully clothed, same outfit as box 1."
+
+## BEAR HUG LIFT
+- What: arms locked in a ring at chest height, leaning far back, knees bent, lifting someone off the floor.
+- Reference: refs/poses/bear_hug_lift.png (Nurse sheet C box 4). Use for suplex lifts.
+
+## BRIDGE SUPLEX
+- What: full wrestling bridge: feet planted on the floor, back arched high, head and shoulders down behind, arms locked
+  in a ring above the chest. Use for suplexes / German suplexes (mirror for facing left).
+- Reference: refs/poses/bridge_suplex.png (Nurse sheet C box 5).
