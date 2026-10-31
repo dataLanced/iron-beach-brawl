@@ -13,6 +13,12 @@ drives the iteration. Every new mechanic ships with a way to tune it live, on a 
 - Stage/Wave editor: enemy groups, spawn points, pacing.
 Tuned values are data (JSON), copied back to Claude to bake, never hand-edited in code.
 
+## Decision: engine
+The next game is a practice project, so it is built on our own browser engine again (plain JS, phone-first, no install),
+with the clean architecture in section 3 from day one. Godot is the choice only if a later project targets Steam or
+consoles; Unity / Unreal only if a platform requires them. The sprite pipeline (Prompt Forge, cutter, packer,
+victim sets) is engine-independent and carries over unchanged.
+
 ## 1. Working with the user
 - Mostly on a phone. Keep replies scannable; always SEND the files they need (templates, refs, screenshots) next to
   the prompts so they never scroll back. Put every prompt in a code block.
