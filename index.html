@@ -107,6 +107,7 @@ button:focus-visible { outline: 2px solid var(--sun); outline-offset: 2px; }
   <span><b>FACE THEM</b> OR GET SUPLEXED</span>
   <span><b>B / ;</b> SPECIAL (KICK + JUMP)</span>
   <span><b>HOLD G</b> GUARD (SCARLETT)</span>
+  <span><b>CONTROLLER</b> □ PUNCH · △ KICK · ✕ JUMP · ○ SPECIAL · R1 GUARD · OPTIONS START/PAUSE</span>
   <span><b>P</b> PAUSE</span>
   <span><b>ENTER</b> START · <b>◀ ▶</b> PICK FIGHTER</span>
   <span><b>V</b> VERSUS</span>
@@ -15807,6 +15808,41 @@ const FOEP = { e: null, t: -9, shown: 0 };
     ctx.restore();
   };
 }
+/* ---------- GAMEPAD (PS4 / PS5 / Xbox, standard mapping) ----------
+   The pad is read every frame and turned into the same key events the keyboard sends, so every mode and menu that
+   works on the keyboard works on the pad.
+   PS: Square = punch · Triangle = kick · Cross = jump · Circle = special (kick + jump) · R1 / L1 / R2 = guard (hold)
+       D-pad or left stick = move (double-tap to run / dodge) · OPTIONS = start / pause · SHARE = back to select
+   (Xbox: X punch, Y kick, A jump, B special, RB guard, Menu start, View back.) */
+const GP = { prev: {}, on: false };
+function gpKey(key, down) {
+  if (!!GP.prev[key] === down) return;
+  GP.prev[key] = down;
+  dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key, bubbles: true }));
+}
+function gpPoll() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const p = [...pads].find(x => x && x.connected);
+  if (p) {
+    if (!GP.on) { GP.on = true; game.fx.push({ k: 'tag', x: game.cam + W / 2, y: 120, t: 0, life: 1.4, txt: 'CONTROLLER CONNECTED' }); }
+    const b = i => !!(p.buttons[i] && (p.buttons[i].pressed || p.buttons[i].value > .5)), ax = i => p.axes[i] || 0;
+    const play = game.mode === 'play';
+    gpKey('ArrowLeft', b(14) || ax(0) < -.5);
+    gpKey('ArrowRight', b(15) || ax(0) > .5);
+    gpKey('ArrowUp', b(12) || ax(1) < -.5);
+    gpKey('ArrowDown', b(13) || ax(1) > .5);
+    gpKey('j', b(2));                       // Square / X
+    gpKey('k', b(3));                       // Triangle / Y
+    gpKey(play ? 'l' : 'Enter', b(0));      // Cross / A: jump in a fight, confirm in menus
+    gpKey('b', b(1));                       // Circle / B: special
+    gpKey('g', b(5) || b(4) || b(7));       // R1 / L1 / R2: guard
+    gpKey(play || game.mode === 'pause' ? 'p' : 'Enter', b(9));   // OPTIONS / Menu
+    gpKey('Escape', b(8));                  // SHARE / View
+  } else if (GP.on) { GP.on = false; for (const k in GP.prev) gpKey(k, false); }
+  requestAnimationFrame(gpPoll);
+}
+addEventListener('gamepadconnected', () => audio.ensure && audio.ensure());
+requestAnimationFrame(gpPoll);
 /* ---------- GRAB LAB (grab tuner) ----------
    Title screen > GRAB LAB. Pick a victim and one of Scarlett's grabs, step through it frame by frame, and drag the
    victim into her hands (or nudge with the arrows). Each nudge is saved per frame of hers ('row:frame') on this device
