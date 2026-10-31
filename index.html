@@ -10884,7 +10884,7 @@ const SL_CT = {
   'sweep:1': { at: 'neck', pose: 'lift', layer: 'front' },
 };
 // Grab Lab offsets: baked ones + the ones tuned on this device (localStorage), keyed 'row:frame'
-const SL_TUNE_BAKED = {};
+const SL_TUNE_BAKED = {"bunny|grab:0":{"ox":-0.2,"oz":-32.2,"spin":0}};   // tuned in the Grab Lab
 let SL_TUNE = {};
 function slTuneLoad() { let t = {}; try { t = JSON.parse(localStorage.getItem('ibb-grabtune') || '{}'); } catch (e) {} SL_TUNE = Object.assign({}, SL_TUNE_BAKED, t); }
 slTuneLoad();
