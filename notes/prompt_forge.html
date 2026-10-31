@@ -48,7 +48,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 </style>
 
 <h1>Sprite Prompt <span>Forge</span></h1>
-<p class="sub">Builds ChatGPT sheet prompts and Seedance clip prompts the way we make them for Iron Beach Brawl: the transparent-background opener, the box-by-box poses, the back-view wording, the safety line at the end. It also draws the matching template.</p>
+<p class="sub">Builds sprite-sheet prompts and motion-clip prompts the way we make them: the transparent-background opener, one style line reused on every sheet, box-by-box poses with safe back-view wording, and the safety line at the end. Pick the anime style and the image or video tool; it also draws the matching template.</p>
 
 <div class="wrap">
   <div>
@@ -62,11 +62,12 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
       <textarea id="cdesc" placeholder="an adult woman street brawler with long dark brown hair, pink long-sleeve crop top with white cuffs and red tie, pink leggings, barefoot, very muscular chibi build"></textarea>
       <label for="cstyle">Style line</label>
       <textarea id="cstyle"></textarea>
-      <div class="chips">
-        <button data-style="ibb">Iron Beach Brawl cast style</button>
-        <button data-style="pixel">Old pixel-art look (twin-tails)</button>
-        <button data-style="custom">Clear</button>
-      </div>
+      <div class="row" style="margin-top:6px"><select id="stylePick" style="flex:1"></select><select id="buildPick" style="flex:1"><option value="">build: as described</option><option value="muscular">build: very muscular</option><option value="athletic">build: athletic</option><option value="slim">build: slim</option><option value="heavy">build: heavy</option></select></div>
+      <div class="hint">Pick a base style, then edit the line freely. Keep one style per project and reuse the exact same line on every prompt; drift between sheets is what forces redraws.</div>
+      <label for="imgTool">Image tool</label>
+      <select id="imgTool"><option value="chatgpt">ChatGPT (GPT image)</option><option value="gemini">Gemini / Nano Banana</option><option value="midjourney">Midjourney</option><option value="sd">Stable Diffusion / Flux (ComfyUI, ControlNet)</option><option value="other">Other (plain prompt)</option></select>
+      <label for="vidTool">Video tool</label>
+      <select id="vidTool"><option value="seedance">Seedance</option><option value="kling">Kling</option><option value="veo">Google Veo / Flow</option><option value="wan">Wan</option><option value="grok">Grok Imagine</option><option value="other">Other</option></select>
       <div class="check"><input type="checkbox" id="adult" checked><label for="adult">State "adult woman" in the description (always on for this project)</label></div>
     </div>
 
@@ -91,7 +92,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
         <textarea id="motion" placeholder="throws a fast rising uppercut with her right fist, leaving the ground slightly at the top"></textarea>
         <label for="angle">Camera angle</label>
         <select id="angle"><option>side view, facing right</option><option>front three-quarter view</option><option>rear three-quarter view, turned away from the camera</option></select>
-        <div class="hint">Seedance rules baked in: flat green background, the stance as both start and end frame, locked-off camera wording, 4 seconds. Use Seedance 2.5 on Luno if Venice blocks it.</div>
+        <div class="hint">Rules baked in: flat green background, the stance as the start (and end) frame, locked-off camera wording, 4 seconds. The note under the prompt changes with the video tool you picked.</div>
       </div>
       <div id="designUI" hidden>
         <label for="dnotes">Design brief (role, outfit, vibe, build)</label>
@@ -122,19 +123,27 @@ const OPEN = 'TRANSPARENT BACKGROUND. No glow, no shadow, no white outline. The 
 const CLOSE = 'Please make these in a way that is suitable with your image restriction guidelines. And if you have a problem with it, please adjust the image.';
 const BACK = ' Seen from a rear three-quarter angle: she is turned away from the camera, over-the-shoulder, so her back and the back of her head face the viewer.';
 const STYLES = {
-  ibb: 'Match the art style exactly: clean anime game-sprite art, thin dark-brown outlines, soft cel shading with gentle highlights, warm skin tones, expressive sharp eyes and a confident look. Chibi-leaning proportions: head about 1/4 of her height, very muscular build with big rounded shoulders and arms, thick defined thighs and calves, visible abs, wide fighting stance.',
-  pixel: 'Match the art style exactly: crisp game-sprite pixel-art look with thick dark outlines and flat shading, chibi proportions, very muscular build.',
+  chibi: 'Clean anime game-sprite art, thin dark outlines, soft cel shading with gentle highlights, expressive sharp eyes. Chibi proportions: head about 1/4 of her height, big rounded shoulders and arms, thick thighs and calves, wide fighting stance.',
+  semi: 'Clean anime game-sprite art, thin dark outlines, cel shading with two tones and a highlight. Semi-chibi proportions: head about 1/5 of her height, athletic build, long legs, strong readable silhouette.',
+  classic: 'Classic 90s anime style, full adult proportions (head about 1/7 of her height), confident inked line work, flat cel colours with hard-edged shadows, muted palette, slight film-grain feel.',
+  modern: 'Modern high-resolution anime illustration: crisp vector-clean line art, rich cel shading with rim light, detailed hair strands and fabric folds, full adult proportions, like a current fighting-game character portrait.',
+  comic: 'Hand-drawn anime-comic hybrid (Streets of Rage 4 look): bold brush-ink outlines of varying weight, painterly cel shading with coloured rim light, exaggerated muscular proportions, dynamic posing.',
+  pixel16: 'Authentic 16-bit arcade pixel art: a limited palette of about 24 colours, hard black 1-pixel outlines, dithered shading, chunky readable silhouette, no anti-aliasing, no gradients. Anime face with big eyes.',
+  pixelhd: 'High-resolution pixel art (HD-2D, Blazblue / Guilty Gear style sprites): fine pixel clusters, anime proportions and face, hand-placed highlights, clean sub-pixel outlines, no blur.',
+  painted: 'Painterly anime style: soft brushed shading, visible brush texture on hair and cloth, glowing highlights, no hard outlines, full adult proportions, cinematic lighting.',
   custom: ''
 };
+const STYLE_NAMES = { chibi: 'Chibi cel-shaded (Iron Beach Brawl)', semi: 'Semi-chibi cel-shaded', classic: '90s classic anime', modern: 'Modern hi-res anime', comic: 'Brush-ink anime comic (SOR4-like)', pixel16: '16-bit arcade pixel art', pixelhd: 'HD pixel art (GG / Blazblue)', painted: 'Painterly anime', custom: 'Custom' };
+const BUILDS = { '': '', muscular: ' Very muscular build: big rounded shoulders, visible abs, thick defined thighs.', athletic: ' Athletic, toned build.', slim: ' Slim, lithe build.', heavy: ' Heavy, broad, powerful build.' };
 const CAST = {
-  '': { name: '', desc: '', style: 'ibb' },
-  scarlett: { name: 'Scarlett', desc: 'an adult woman street brawler with long dark brown hair, a pink/magenta long-sleeve crop top with white cuffs and collar and a red tie, pink leggings, barefoot, very muscular chibi build', style: 'ibb' },
-  twin: { name: 'Twin-tail', desc: 'an adult woman brawler with long black twin-tail pigtails, blue eyes, a silver-grey sleeveless one-piece wrestling suit (the suit must stay SILVER-GREY), black shoes, very muscular chibi build', style: 'pixel' },
-  rookie: { name: 'Rookie kunoichi', desc: 'an adult woman kunoichi with a short black bob haircut, blue eyes, a dark green long-sleeve ninja top with red trim, dark green shorts, red-and-black sneakers with white socks, very muscular chibi build (the green and the red trim must stay exactly the same)', style: 'ibb' },
-  purple: { name: 'Purple kunoichi', desc: 'an adult woman kunoichi with a long black high ponytail, blue eyes, a black cloth face mask over her nose and mouth, a purple long-sleeve ninja top and purple shorts, white hand wraps, red-and-black sneakers with white socks, very muscular chibi build', style: 'ibb' },
-  gold: { name: 'Gold kunoichi', desc: 'an adult woman kunoichi with a long black high ponytail and a gold headband, blue eyes, a confident smirk, a black sleeveless ninja outfit with gold trim, gold wrist guards, red-and-black sneakers with white socks, very muscular chibi build', style: 'ibb' },
-  mika: { name: 'Mika', desc: 'an adult woman school-uniform brawler with short pink hair, a white sailor top with a red tie, a navy pleated skirt, white socks and black shoes, very muscular chibi build', style: 'ibb' },
-  nurse: { name: 'Nurse', desc: 'an adult woman nurse brawler with dark hair tied up, a white nurse dress with a red cross, white stockings and shoes, very muscular chibi build', style: 'ibb' },
+  '': { name: '', desc: '', style: 'chibi' },
+  scarlett: { name: 'Scarlett', desc: 'an adult woman street brawler with long dark brown hair, a pink/magenta long-sleeve crop top with white cuffs and collar and a red tie, pink leggings, barefoot, very muscular chibi build', style: 'chibi' },
+  twin: { name: 'Twin-tail', desc: 'an adult woman brawler with long black twin-tail pigtails, blue eyes, a silver-grey sleeveless one-piece wrestling suit (the suit must stay SILVER-GREY), black shoes, very muscular chibi build', style: 'pixel16' },
+  rookie: { name: 'Rookie kunoichi', desc: 'an adult woman kunoichi with a short black bob haircut, blue eyes, a dark green long-sleeve ninja top with red trim, dark green shorts, red-and-black sneakers with white socks, very muscular chibi build (the green and the red trim must stay exactly the same)', style: 'chibi' },
+  purple: { name: 'Purple kunoichi', desc: 'an adult woman kunoichi with a long black high ponytail, blue eyes, a black cloth face mask over her nose and mouth, a purple long-sleeve ninja top and purple shorts, white hand wraps, red-and-black sneakers with white socks, very muscular chibi build', style: 'chibi' },
+  gold: { name: 'Gold kunoichi', desc: 'an adult woman kunoichi with a long black high ponytail and a gold headband, blue eyes, a confident smirk, a black sleeveless ninja outfit with gold trim, gold wrist guards, red-and-black sneakers with white socks, very muscular chibi build', style: 'chibi' },
+  mika: { name: 'Mika', desc: 'an adult woman school-uniform brawler with short pink hair, a white sailor top with a red tie, a navy pleated skirt, white socks and black shoes, very muscular chibi build', style: 'chibi' },
+  nurse: { name: 'Nurse', desc: 'an adult woman nurse brawler with dark hair tied up, a white nurse dress with a red cross, white stockings and shoes, very muscular chibi build', style: 'chibi' },
 };
 const LIB = {
   'Grabbed & struggling': 'GRABBED AND STRUGGLING. Standing, upper body pushed back, both hands gripping an invisible opponent\'s forearms in front of her chest, teeth gritted, one eye shut. Feet on the floor line.',
@@ -164,9 +173,11 @@ const SETS = {
 let kind = 'sheet6', boxes = [];
 const $ = id => document.getElementById(id);
 const pre = $('preset'); for (const k in CAST) { const o = document.createElement('option'); o.value = k; o.textContent = k ? CAST[k].name : '— new character —'; pre.appendChild(o); }
-$('loadPreset').onclick = () => { const c = CAST[pre.value]; $('cname').value = c.name; $('cdesc').value = c.desc; $('cstyle').value = STYLES[c.style]; save(); build(); };
-document.querySelectorAll('[data-style]').forEach(b => b.onclick = () => { $('cstyle').value = STYLES[b.dataset.style]; build(); });
-$('cstyle').value = STYLES.ibb;
+$('loadPreset').onclick = () => { const c = CAST[pre.value]; $('cname').value = c.name; $('cdesc').value = c.desc; sp.value = c.style; $('cstyle').value = STYLES[c.style]; save(); build(); };
+const sp = $('stylePick'); for (const k in STYLE_NAMES) { const o = document.createElement('option'); o.value = k; o.textContent = STYLE_NAMES[k]; sp.appendChild(o); }
+sp.onchange = () => { $('cstyle').value = STYLES[sp.value]; build(); };
+$('buildPick').onchange = build;
+$('cstyle').value = STYLES.chibi;
 const lib = $('poselib'); for (const n in LIB) { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { const i = boxes.findIndex(x => !x.text.trim()); const at = i < 0 ? boxes.length - 1 : i; boxes[at].text = LIB[n]; if (/FROM BEHIND|BEHIND\b/.test(LIB[n])) boxes[at].back = true; renderBoxes(); build(); }; lib.appendChild(b); }
 function nBoxes() { return kind === 'sheet10' ? 10 : kind === 'fix' ? 6 : 6; }
 function setKind(k) {
@@ -188,7 +199,7 @@ function renderBoxes() {
     d.querySelector('#air' + i).onchange = e => { bx.air = e.target.checked; build(); };
   });
 }
-function desc() { let d = $('cdesc').value.trim() || '[describe the character]'; if ($('adult').checked && !/adult/i.test(d)) d = 'an adult woman, ' + d.replace(/^(an?\s+)/i, ''); return d; }
+function desc() { let d = $('cdesc').value.trim() || '[describe the character]'; if ($('adult').checked && !/adult/i.test(d)) d = 'an adult woman, ' + d.replace(/^(an?\s+)/i, ''); return d + (BUILDS[$('buildPick').value] || ''); }
 function build() {
   const name = $('cname').value.trim() || 'the character', style = $('cstyle').value.trim(), n = nBoxes();
   let p = '', attach = '';
@@ -204,10 +215,20 @@ function build() {
     p = `${OPEN}\n\nFill in this ${n}-box sprite sheet template for the same character shown in box 1: ${desc()}. Keep her EXACTLY as she looks in box 1: ${style ? style + ' ' : ''}Same face, same hair, same outfit colours, same proportions and same size. She faces RIGHT in every box unless a box says otherwise. One pose per box, nothing crossing into another box. Standing poses have their feet on the floor line of their box and the top of the head on the dashed head line. Remove the box numbers, dashed lines and floor lines from the final image.${intro}\n\nBox 1: keep as is (her fighting stance).\n${lines.join('\n')}\n\n${CLOSE}`;
     attach = `<b>Attach:</b> the ${n}-box template below with ${name}'s stance in box 1. After a refusal, start a fresh chat.`;
   }
+  const it = $('imgTool').value, vt = $('vidTool').value;
+  if (kind === 'seedance') {
+    const notes = { seedance: 'Seedance: attach the stance as BOTH the start and the end frame. Seedance 2.5 on Luno is less strict than Venice.', kling: 'Kling: use start AND end frame (both the stance). Set 5s if 4s is not offered; we trim.', veo: 'Veo / Flow: takes a start frame only, so the prompt itself asks for the return to the stance. Pick the 16:9 option and the highest quality.', wan: 'Wan: start frame only; keep the prompt short, it follows the image more than the text.', grok: 'Grok Imagine: start frame only; it tends to add camera moves, so keep the locked-camera line first.', other: 'Use the stance as the first frame (and last, if the tool allows).' };
+    attach = '<b>' + notes[vt] + '</b> Then key the green, pick 5–10 frames, and send the frames to Claude.';
+    if (vt === 'wan' || vt === 'grok') p = p.replace(' Clean, readable key poses. No other characters, no text, no particle effects, no camera movement.', ' No camera movement, no other characters, no text.');
+  } else {
+    if (it === 'midjourney') { p = p.replace(OPEN + '\n\n', '').replace('\n\n' + CLOSE, '') + ' --ar 3:2 --style raw --no background, shadow, glow, text, watermark'; attach += ' Midjourney cannot read a template image as a grid: drop the template as an image prompt anyway for scale, and expect to cut the sheet by hand.'; }
+    else if (it === 'sd') { p = 'POSITIVE: ' + p.replace(OPEN + '\n\n', '').replace('\n\n' + CLOSE, '').replace(/\n/g, ' ') + '\n\nNEGATIVE: background, shadow, glow, white outline, text, watermark, extra characters, blurry, deformed hands, extra limbs\n\nSETUP: character LoRA at 0.7–0.9, ControlNet OpenPose from a pose skeleton per box, denoise 0.55–0.7 for img2img passes, transparent output via a background remover.'; attach = '<b>SD / Flux:</b> one generation per box is more reliable than a whole sheet; keep the seed fixed per character.'; }
+    else if (it === 'gemini') attach += ' Gemini / Nano Banana: attach the template first, then the prompt; ask for "exactly the same image size as the template".';
+  }
   $('out').textContent = p; $('attach').innerHTML = attach; save();
 }
 $('copy').onclick = async () => { const t = $('out').textContent; try { await navigator.clipboard.writeText(t); $('copied').textContent = 'Copied'; } catch (e) { const r = document.createRange(); r.selectNodeContents($('out')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copied').textContent = 'Select and copy'; } setTimeout(() => $('copied').textContent = '', 2000); };
-['cname', 'cdesc', 'cstyle', 'motion', 'angle', 'dnotes', 'adult'].forEach(id => $(id).addEventListener('input', build));
+['cname', 'cdesc', 'cstyle', 'motion', 'angle', 'dnotes', 'adult', 'imgTool', 'vidTool'].forEach(id => $(id).addEventListener('input', build));
 // ---- template drawing (same geometry as tools/mktpl.py)
 let stanceImg = null;
 $('stance').onchange = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { stanceImg = img; drawTpl(); }; img.src = URL.createObjectURL(f); };
@@ -238,6 +259,6 @@ function drawTpl() {
   }
   $('tpl').src = c.toDataURL('image/png');
 }
-function save() { try { localStorage.setItem('forge', JSON.stringify({ name: $('cname').value, desc: $('cdesc').value, style: $('cstyle').value, kind, boxes, motion: $('motion').value, dnotes: $('dnotes').value })); } catch (e) {} }
-(function load() { try { const s = JSON.parse(localStorage.getItem('forge') || 'null'); if (s) { $('cname').value = s.name || ''; $('cdesc').value = s.desc || ''; $('cstyle').value = s.style || STYLES.ibb; $('motion').value = s.motion || ''; $('dnotes').value = s.dnotes || ''; boxes = s.boxes || []; setKind(s.kind || 'sheet6'); return; } } catch (e) {} $('loadPreset').click(); pre.value = 'scarlett'; $('loadPreset').click(); setKind('sheet6'); })();
+function save() { try { localStorage.setItem('forge', JSON.stringify({ name: $('cname').value, desc: $('cdesc').value, style: $('cstyle').value, kind, boxes, motion: $('motion').value, dnotes: $('dnotes').value, imgTool: $('imgTool').value, vidTool: $('vidTool').value, stylePick: sp.value, build: $('buildPick').value })); } catch (e) {} }
+(function load() { try { const s = JSON.parse(localStorage.getItem('forge') || 'null'); if (s) { $('cname').value = s.name || ''; $('cdesc').value = s.desc || ''; $('cstyle').value = s.style || STYLES.chibi; $('motion').value = s.motion || ''; $('dnotes').value = s.dnotes || ''; $('imgTool').value = s.imgTool || 'chatgpt'; $('vidTool').value = s.vidTool || 'seedance'; sp.value = s.stylePick || 'chibi'; $('buildPick').value = s.build || ''; boxes = s.boxes || []; setKind(s.kind || 'sheet6'); return; } } catch (e) {} $('loadPreset').click(); pre.value = 'scarlett'; $('loadPreset').click(); setKind('sheet6'); })();
 </script>
