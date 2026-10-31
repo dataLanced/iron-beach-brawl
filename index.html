@@ -16003,6 +16003,102 @@ function labPanel() {
     }
   };
 }
+/* ---------- JUGGLES (one reaction system for every enemy) ----------
+   The player's knockdown hits (hit.knock / hit.launch) launch any regular enemy into the air instead of only
+   stunning them. While she's up there, more hits keep her floating (each one a little lower, with a cap), she
+   bounces once off the boards on a hard landing, lies there with a short window for OTG hits, then gets up with a
+   moment of invincibility. Enemies run this state ('jug') here instead of in their own code, so it's the same for
+   everyone. Tunables live in JUG (Sandbox > JUGGLE edits them live). Not used in watch mode (it has its own). */
+const JUG = { launch: 1.5, grav: 1400, float: 330, decay: .86, maxAir: 7, bounce: .42, bounceMin: 260, downT: .75, otg: .45, otgPop: 170, getupInv: .35, hitZ: 170, heavy: .6 };
+const jugOK = e => e && !e.__real && e !== hero && !game.watch && e.cls !== 'vex' && e.cls !== 'drone' && e.state !== 'ko' && e.hp > 0;
+const jugHeavy = e => e.cls === 'sumo' || e.cls === 'metal2' || (e.tier && TIERS[e.tier] && TIERS[e.tier].boss);
+function jugLaunch(e, vz, vx) {
+  if (e.holding) { const v = e.holding.__real || e.holding; if (v.heldBy === e) { v.heldBy = null; v.spin = 0; if (v === hero && hero.state === 'held') setState(hero, 'idle'); } e.holding = null; }
+  if (e.state !== 'jug') { const ja = e.jAir, jb = e.jBounced; setState(e, 'jug'); e.jAir = ja || 0; e.jBounced = !!jb; }
+  e.jg = 'air'; e.vz = vz; e.z = Math.max(e.z || 0, 1); e.vx = vx; e.vy = 0; e.rot = 0; e.spin = 0; e.armor = false; e.poise = 0; e.targetX = null; e.inv = 0;
+}
+{
+  const _dmg = damage;
+  damage = function (t, hit, att) {
+    const fromHero = att && hero && (att === hero || att.slOwner === hero);
+    if (t && t.state === 'jug' && jugOK(t)) {
+      // too high for a grounded strike, or lying there past the OTG window: it whiffs
+      if (t.jg === 'air' && t.z > JUG.hitZ && !(att && att.z > 20)) return;
+      if (t.jg === 'down' && game.t - t.jDownT > JUG.otg) return;
+    }
+    const hp0 = t && t.hp, wasJug = t && t.state === 'jug', wasDown = wasJug && t.jg === 'down';
+    const r = _dmg(t, hit, att);
+    if (!fromHero || !jugOK(t) || !hit || !(t.hp < hp0)) return r;   // blocked, or not ours
+    const face = att.face || Math.sign(t.x - att.x) || 1, heavy = jugHeavy(t) ? JUG.heavy : 1;
+    if (wasJug || (t.z || 0) > 4) {   // an air hit (or OTG): keep her up, a little lower each time
+      if (wasDown) { jugLaunch(t, JUG.otgPop * heavy, face * 60); }
+      else if ((t.jAir || 0) < JUG.maxAir) { t.jAir = (t.jAir || 0) + 1; jugLaunch(t, (hit.launch ? Math.max(hit.launch * JUG.launch, JUG.float) : JUG.float) * Math.pow(JUG.decay, t.jAir) * heavy, face * (hit.kb || 80) * .35); }
+      else { const z = t.z; jugLaunch(t, Math.min(t.vz || 0, -60), face * 90); t.z = z; }   // past the cap: no more lift, she just falls
+      t.flash = .12; return r;
+    }
+    if (hit.knock || hit.launch) { t.jAir = 0; t.jBounced = false; jugLaunch(t, (hit.launch || 320) * JUG.launch * heavy, face * (hit.kb || 200) * .45); }
+    return r;
+  };
+}
+function jugUpdate(e, dt) {
+  e.st += dt; e.ft2 = (e.ft2 || 0) + dt * 1000;
+  if (e.flash > 0) e.flash -= dt;
+  if (e.jg === 'air') {
+    e.vz -= JUG.grav * (1 + .06 * (e.jAir || 0)) * dt; e.z += e.vz * dt;
+    e.tilt = -Math.max(-.6, Math.min(.6, e.vz / 900));
+    if (e.z <= 0) {
+      e.z = 0; e.tilt = 0;
+      if (!e.jBounced && e.vz < -JUG.bounceMin) {   // one bounce off the boards
+        e.jBounced = true; e.vz = -e.vz * JUG.bounce; e.z = .5; e.vx *= .6;
+        game.shake = Math.max(game.shake, 6); dust(e.x, e.y, 8); audio.thump(70, .2, .4);
+        game.fx.push({ k: 'spark', x: e.x, y: e.y - 10, t: 0, life: .3, big: true });
+      } else { e.jg = 'down'; e.jDownT = game.t; e.vz = 0; e.vx *= .3; dust(e.x, e.y, 5); }
+    }
+    e.vx *= Math.pow(.35, dt);
+    return;
+  }
+  if (e.vz > 0) { e.jg = 'air'; return; }   // popped back up by an OTG hit that set her moving
+  // lying on the boards, then up
+  e.vx *= Math.pow(.02, dt);
+  if (game.t - e.jDownT > JUG.downT) {
+    e.jg = null; e.z = 0; e.vz = 0; e.vx = 0; e.tilt = 0; e.rot = 0; e.spin = 0; e.jAir = 0;
+    setState(e, 'idle'); e.anim = 'idle'; e.ca = 'idle'; e.cfi = 0; e.inv = JUG.getupInv;
+    if (e.ai) e.ai.cd = Math.max(e.ai.cd || 0, .5); if (typeof e.cd === 'number') e.cd = Math.max(e.cd, .5);
+  }
+}
+{
+  const _ue = updateEnemy;
+  updateEnemy = function (e, dt) {
+    if (e.state === 'jug') { if (e.inv > 0 && e.inv < 90) e.inv -= dt; jugUpdate(e, dt); return; }
+    return _ue(e, dt);
+  };
+  // which of her own frames to show: a drawn victim set first, then her hurt / down rows
+  const _fo = frameOf;
+  frameOf = function (f) {
+    if (f && f.state === 'jug' && f.frames) {
+      const F = f.frames, has = (r, i) => F[r] && F[r][i] ? [r, i] : null;
+      if (f.jg === 'down') return has('victim', 4) || has('down', 0) || (F.hurt && F.hurt.length >= 4 ? ['hurt', 3] : null) || has('hurt', 0) || ['idle', 0];
+      return has('victim', 2) || has('airhurt', 0) || has('hurt', Math.min(2, (F.hurt || [0]).length - 1)) || ['idle', 0];
+    }
+    return _fo(f);
+  };
+  // lying down without a lying-down frame: tip the sprite over
+  const _st = spriteTransform;
+  spriteTransform = function (f, sx, sy) {
+    if (f && f.state === 'jug' && f.jg === 'down') {
+      const F = f.frames || {}, flat = (F.victim && F.victim[4]) || (F.down && F.down[0]) || (F.hurt && F.hurt.length >= 4);
+      const r = f.rot; f.rot = flat ? 0 : 1; _st(f, sx, sy); f.rot = r; return;
+    }
+    return _st(f, sx, sy);
+  };
+}
+// Scarlett's stomp / torpedo / OTG moves find a juggled body lying on the boards too
+if (typeof slDowned === 'function') {
+  const _sd = slDowned;
+  slDowned = function (h, reach) {
+    return _sd(h, reach) || game.enemies.find(e => e.state === 'jug' && e.jg === 'down' && e.hp > 0 && (e.x - h.x) * h.face > -20 && (e.x - h.x) * h.face < reach && Math.abs(e.y - h.y) < 30);
+  };
+}
 /* ---------- SANDBOX (title screen > SANDBOX) ----------
    A test bench for moves, hit feel and enemy behaviour. Everything is tuned live and saved on this device;
    COPY puts the changes on the clipboard to paste back to Claude, who bakes them into the game.
@@ -16013,7 +16109,7 @@ function labPanel() {
    Move and feel changes apply everywhere (like the Grab Lab); AI changes apply only in the sandbox. */
 const SBX = {
   open: true, tab: 'setup', pause: false, stepN: 0, speed: 1, acc: 0, aiOff: false, foeInf: true, heroInf: true, foes: [], el: null, btn: null, starting: false,
-  feel: { hitstop: 1, shake: 1, spark: 1, dmg: 1, kb: 1 }, ai: {}, maxAtk: 0, moves: {}, sel: null,
+  feel: { hitstop: 1, shake: 1, spark: 1, dmg: 1, kb: 1 }, ai: {}, jug: {}, maxAtk: 0, moves: {}, sel: null,
 };
 const SBX_FIELDS = [['ms', 'time ms', 5], ['dmg', 'damage', 1], ['kb', 'knockback', 10], ['reach', 'reach', 2], ['stun', 'stun s', .05], ['launch', 'launch', 20], ['lunge', 'lunge', 10]];
 const SBX_FLAGS = [['big', 'big'], ['knock', 'knockdown'], ['low', 'low']];
@@ -16053,9 +16149,10 @@ function sbxResetMove(pcKey, id) {
   if (o.hit) { if (!st.hit) st.hit = {}; for (const k in st.hit) delete st.hit[k]; Object.assign(st.hit, JSON.parse(JSON.stringify(o.hit))); } else delete st.hit;
   if (SBX.moves[pcKey]) delete SBX.moves[pcKey][id];
 }
-function sbxSave() { try { localStorage.setItem('ibb-sbx', JSON.stringify({ feel: SBX.feel, ai: SBX.ai, maxAtk: SBX.maxAtk, moves: SBX.moves })); } catch (e) {} }
-function sbxLoad() { try { const d = JSON.parse(localStorage.getItem('ibb-sbx') || '{}'); Object.assign(SBX.feel, d.feel || {}); SBX.ai = d.ai || {}; SBX.maxAtk = d.maxAtk || 0; SBX.moves = d.moves || {}; } catch (e) {} }
-sbxSnap(); sbxLoad(); sbxApplyMoves();
+function sbxSave() { try { localStorage.setItem('ibb-sbx', JSON.stringify({ feel: SBX.feel, ai: SBX.ai, maxAtk: SBX.maxAtk, moves: SBX.moves, jug: SBX.jug })); } catch (e) {} }
+function sbxLoad() { try { const d = JSON.parse(localStorage.getItem('ibb-sbx') || '{}'); Object.assign(SBX.feel, d.feel || {}); SBX.ai = d.ai || {}; SBX.maxAtk = d.maxAtk || 0; SBX.moves = d.moves || {}; SBX.jug = d.jug || {}; } catch (e) {} }
+const JUG0 = typeof JUG !== 'undefined' ? Object.assign({}, JUG) : {};
+sbxSnap(); sbxLoad(); sbxApplyMoves(); if (typeof JUG !== 'undefined') Object.assign(JUG, SBX.jug);
 
 // ---- spawning
 function sbxSpawn() {
@@ -16167,7 +16264,7 @@ function sbxUI() {
   SBX.el.style.display = SBX.open ? 'block' : 'none';
   sbxPad();
   if (!SBX.open) return;
-  const tabs = ['setup', 'moves', 'feel', 'ai'].map(t => sbxB('tab:' + t, t.toUpperCase(), SBX.tab === t)).join(' ');
+  const tabs = ['setup', 'moves', 'juggle', 'feel', 'ai'].map(t => sbxB('tab:' + t, t.toUpperCase(), SBX.tab === t)).join(' ');
   let h = `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;padding-right:70px"><b style="color:#ffd36b">SANDBOX</b> ${tabs} ${sbxB('copy', 'COPY')} ${sbxB('exit', 'EXIT')}<span id="sbxMsg" style="color:#7fd6ff"></span></div>`;
   const row = s => `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:5px 0">${s}</div>`;
   if (SBX.tab === 'setup') {
@@ -16187,6 +16284,11 @@ function sbxUI() {
       h += row(SBX_FLAGS.map(([f, lab]) => sbxB('flag:' + f, lab, !!(st.hit && st.hit[f]))).join(' ') + (st.hit ? '' : ' <span style="color:#a99cc8">(no hit on this step: setting damage adds one)</span>'));
       h += row('<span style="color:#a99cc8">time = how long this step lasts · launch = how high a knockdown sends them · lunge = how far she steps in</span>');
     }
+  } else if (SBX.tab === 'juggle') {
+    const J = [['launch', 'LAUNCH HEIGHT ×', .1], ['float', 'AIR-HIT FLOAT', 10], ['decay', 'FLOAT DECAY / HIT', .02], ['maxAir', 'MAX AIR HITS', 1], ['grav', 'GRAVITY', 50],
+      ['bounce', 'FLOOR BOUNCE', .05], ['bounceMin', 'BOUNCE ABOVE SPEED', 20], ['downT', 'TIME DOWN s', .05], ['otg', 'OTG WINDOW s', .05], ['otgPop', 'OTG POP', 10], ['getupInv', 'GET-UP INVINCIBLE s', .05], ['hitZ', 'MAX HEIGHT HITTABLE', 10], ['heavy', 'HEAVY ENEMIES ×', .05]];
+    h += row(J.map(([k, lab, stp]) => `${lab} ${sbxNum('j:' + k, JUG[k], stp)}`).join(' &nbsp; '));
+    h += row(sbxB('jreset', 'RESET JUGGLE') + ' <span style="color:#a99cc8">knockdown hits launch · air hits keep them up · one floor bounce · OTG hits while down · applies everywhere</span>');
   } else if (SBX.tab === 'feel') {
     const F = SBX.feel;
     h += row([['hitstop', 'HIT-STOP ×'], ['shake', 'SHAKE ×'], ['spark', 'SPARK SIZE ×'], ['dmg', 'MY DAMAGE ×'], ['kb', 'MY KNOCKBACK ×']].map(([k, lab]) => `${lab} ${sbxNum('f:' + k, F[k], .1)}`).join(' &nbsp; '));
@@ -16218,10 +16320,11 @@ function sbxDo(a) {
   else if (k === 'try') { if (hero && SL_S[SBX.sel]) { setState(hero, 'idle'); slStart(hero, SBX.sel); } }
   else if (k === 'mreset') sbxResetMove(sbxPcKey(), SBX.sel);
   else if (k === 'flag') { const st = sbxStep(sbxPcKey(), SBX.sel); sbxSet(sbxPcKey(), SBX.sel, v, !(st && st.hit && st.hit[v]) || false); }
+  else if (k === 'jreset') { SBX.jug = {}; Object.assign(JUG, JUG0); }
   else if (k === 'freset') SBX.feel = { hitstop: 1, shake: 1, spark: 1, dmg: 1, kb: 1 };
   else if (k === 'aireset') { SBX.ai = {}; SBX.maxAtk = 0; }
   else if (k === 'copy') {
-    const txt = 'SANDBOX TUNE ' + JSON.stringify({ moves: SBX.moves, feel: SBX.feel, ai: SBX.ai, maxAtk: SBX.maxAtk });
+    const txt = 'SANDBOX TUNE ' + JSON.stringify({ moves: SBX.moves, feel: SBX.feel, ai: SBX.ai, maxAtk: SBX.maxAtk, juggle: SBX.jug });
     try { navigator.clipboard.writeText(txt); sbxMsg('Copied - paste it to Claude'); } catch (e) { sbxMsg(txt); }
   }
   sbxSave(); sbxUI();
@@ -16233,6 +16336,7 @@ function sbxChange(t) {
   else if (t.dataset.n) {
     const [k, a, b] = t.dataset.n.split(':'), v = t.value === '' ? null : +t.value;
     if (k === 'm') sbxSet(sbxPcKey(), SBX.sel, a, v);
+    else if (k === 'j') { if (v != null) { SBX.jug[a] = v; JUG[a] = v; } }
     else if (k === 'f') SBX.feel[a] = v == null ? 1 : Math.max(0, v);
     else if (k === 'a') SBX.maxAtk = Math.max(0, Math.round(v || 0));
     else if (k === 'ai') { (SBX.ai[a] = SBX.ai[a] || {})[b] = v == null ? 1 : Math.max(0, v); }
