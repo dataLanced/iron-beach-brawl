@@ -1716,7 +1716,7 @@ function drawHUD() {
     ctx.fillText('PRESS ATTACK OR JUMP TO RESPAWN', W / 2, py + 74);
   }
   if (game.comboCount > 1) {
-    ctx.save(); ctx.translate(120, 108); const s = 1 + Math.max(0, game.comboTimer - 1.2) * 2; ctx.scale(s, s);
+    ctx.save(); ctx.translate(120, 150);   // below the last-hit enemy panel const s = 1 + Math.max(0, game.comboTimer - 1.2) * 2; ctx.scale(s, s);
     ctx.textAlign = 'center'; ctx.font = '30px Bungee, Impact, sans-serif';
     ctx.fillStyle = '#2b1f52'; ctx.fillText(game.comboCount + ' HITS', 3, 3);
     ctx.fillStyle = '#ffd36b'; ctx.fillText(game.comboCount + ' HITS', 0, 0); ctx.restore();
@@ -10862,10 +10862,10 @@ const SL_GACT = {
   shove:  [['grab', 0, .12], ['kk', 1, .3, 'shove']],
   sweep:  [['sweep', 0, .16, 'hook'], ['sweep', 1, .2, 'trip'], ['sweep', 2, .42, 'slam'], ['sweep', 3, .3]],
   sthrow: [['grab', 0, .1], ['grab', 2, .2, 'up'], ['grab', 2, .16, 'throwB']],
-  ddt:    [['grab', 0, .12, 'flip'], ['grab', 3, .5, 'ddt']],
-  suplex: [['grab', 1, .3, 'lift'], ['grab', 7, .55, 'over']],
+  ddt:    [['grab', 0, .12, 'flip'], ['grab', 3, .55, 'ddt']],
+  suplex: [['grab', 1, .3, 'lift'], ['grab', 7, .7, 'over']],
   vault:  [['grab', 4, .14, 'vup'], ['grab', 5, .18, 'vtop'], ['grab', 6, .12, 'vland']],
-  german: [['grab', 6, .12, 'grip'], ['grab', 7, .6, 'german']],
+  german: [['grab', 6, .12, 'grip'], ['grab', 7, .75, 'german']],
   rknee:  [['grab', 8, .24, 'rknee'], ['grab', 6, .12], ['kk', 1, .28, 'rshove']],
 };
 // per frame of hers: where her hands go on the victim, the victim's pose, and the layer
@@ -10939,7 +10939,7 @@ function slGrabUpd(h, dt) {
     case 'vtop': if (held) { const x0 = h.slVx0, a = x0 + (e.x - x0) * .6, b = e.x + (e.x - x0) * .95; h.x = a + (b - a) * q; h.z = slVaultZ(h, e); } break;
     case 'trip': V.spin = h.face * 1.2 * q; break;
     case 'over': case 'german': {   // the body goes up and over her head and is driven into the boards behind her
-      const imp = ev === 'over' ? .5 : .55;
+      const imp = ev === 'over' ? .39 : .44;   // same arc speed; the slammed pose then holds ~.4s (SOR2-style weight)
       if (held && q < imp) {
         const p = q / imp, th = 1.15 + (Math.PI - 1.15) * p, R = 66 * h.scale;
         V.free = true; V.x = h.x + h.face * R * Math.cos(th); V.z = Math.max(0, R * Math.sin(th) * 1.25 - 10 * p);
@@ -10949,7 +10949,7 @@ function slGrabUpd(h, dt) {
       break;
     }
   }
-  if (ev === 'ddt' && held && q >= .3) slImpact(h, e, 'ddt');
+  if (ev === 'ddt' && held && q >= .27) slImpact(h, e, 'ddt');
   if (!first) return;
   switch (ev) {
     case 'knee': if (held) { h.ghits++; if (p2HitHeld(e, 6)) slThrow(h, e, h.face * 160, 220, 1, 0); else slGain(h, 6 * 1.6); slTag('KNEE!', e.x, e.y - 180, .4); } break;
@@ -10973,7 +10973,7 @@ function slGrabUpd(h, dt) {
 // the exact moment a body hits the boards: damage, stop, shake, dust - then it lies where it landed
 function slImpact(h, e, kind) {
   const D = { over: [20, 'SUPLEX!'], german: [22, 'GERMAN SUPLEX!'], ddt: [18, 'DDT!'] }[kind];
-  game.hitstop = .14; game.shake = 16; audio.thump(45, .45, .7); dust(e.x, e.y, 12);
+  game.hitstop = .2; game.shake = 16; audio.thump(45, .45, .7); dust(e.x, e.y, 12);
   game.fx.push({ k: 'spark', x: e.x, y: e.y - 20, t: 0, life: .3, big: true });
   slTag(D[1], e.x, e.y - 200, 1);
   e.z = 1; slThrow(h, e, (kind === 'ddt' ? h.face : -h.face) * 60, 60, D[0], 0);
@@ -15762,6 +15762,48 @@ function grabArmOf(g) {
     ctx.clip();
     if (g.pixel) ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, Math.floor(fr.x), fr.y || 0, Math.ceil(fr.w), fr.h, -fr.ax, -fr.ay, Math.ceil(fr.w), fr.h);
+    ctx.restore();
+  };
+}
+/* ---------- LAST-HIT ENEMY PANEL (SOR2-style) ----------
+   Under the player's HUD: the portrait, name and health of the last enemy she hit. Fades out 3s after the last hit
+   or when that enemy is gone. */
+const FOE_NAMES = { boxer: 'ROSE', sumo: 'HANAKO', vex: 'VEX', bunny: 'BUNNY', curls: 'CURLS', metal2: 'METALLIC 2', waves: 'WAVES',
+  bobbie: 'BOBBIE', scarlett: 'SCARLETT', hoppy: 'HOPPY', punk: 'PIER PUNK', satsuki: 'SATSUKI', nurse: 'NURSE', demon: 'DEMON', drone: 'DRONE', school: 'MIKA' };
+function foeName(e) {
+  if (!e) return '';
+  if (!e.cls && e.tier && TIERS[e.tier]) return TIERS[e.tier].label + ' TWIN-TAIL';
+  if (e.cls === 'ninja') return ((NJ_VAR[e.nv] && NJ_VAR[e.nv].label) || '') + ' KUNOICHI';
+  if (e.cls === 'school' && e.sv && SG_VAR[e.sv]) return SG_VAR[e.sv].label + ' MIKA';
+  return FOE_NAMES[e.cls] || String(e.cls || 'ENEMY').toUpperCase();
+}
+const FOEP = { e: null, t: -9, shown: 0 };
+{
+  const _dmg = damage;
+  damage = function (t, hit, att) {
+    const r = _dmg(t, hit, att);
+    if (!game.watch && hero && t && t !== hero && !t.__real && att && (att === hero || att.slOwner === hero || att === (hero && hero.__real))) { FOEP.e = t; FOEP.t = game.t; }
+    return r;
+  };
+  const _p2 = typeof p2HitHeld === 'function' ? p2HitHeld : null;
+  if (_p2) p2HitHeld = function (e, dmg) { if (!game.watch && e) { FOEP.e = e; FOEP.t = game.t; } return _p2(e, dmg); };
+  const _hud = drawHUD;
+  drawHUD = function () {
+    _hud.apply(this, arguments);
+    if (game.watch || !hero) return;
+    const e = FOEP.e, live = e && game.enemies.includes(e) && game.t - FOEP.t < 3;
+    FOEP.shown = Math.max(0, Math.min(1, FOEP.shown + (live ? .15 : -.06)));
+    if (!e || FOEP.shown <= 0 || !e.frames || !e.frames.idle) return;
+    const y = typeof isSL === 'function' && isSL(hero) ? 80 : 66, fr = e.frames.idle[0], img = sheets[e.sheet];
+    ctx.save(); ctx.globalAlpha = FOEP.shown;
+    ctx.fillStyle = 'rgba(27,21,48,.78)'; ctx.fillRect(16, y, 250, 34);
+    ctx.save(); ctx.beginPath(); ctx.rect(20, y + 3, 28, 28); ctx.clip();
+    if (img && fr) { const s = fr.w * .56; ctx.drawImage(img, Math.floor(fr.x) + fr.w * .22, (fr.y || 0) + 4, s, s, 20, y + 3, 28, 28); }
+    ctx.restore();
+    ctx.textAlign = 'left'; ctx.fillStyle = '#ffd36b'; ctx.font = '700 11px Silkscreen, monospace'; ctx.fillText(foeName(e), 54, y + 14);
+    const r = Math.max(0, e.hp) / (e.maxHp || 1);
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(54, y + 19, 204, 8);
+    ctx.fillStyle = r > .5 ? '#ff9a3c' : r > .2 ? '#ff6b4a' : '#ff3b5c'; ctx.fillRect(54, y + 19, 204 * r, 8);
     ctx.restore();
   };
 }
