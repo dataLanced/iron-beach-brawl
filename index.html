@@ -10841,12 +10841,12 @@ function slGrabStart(h, e) {
   audio.grab(); game.shake = Math.max(game.shake, 4); slTag('GRAB!', e.x, e.y - 180, .5);
 }
 function slReleaseGrab(h) {
-  const e = h.slGrab; h.slGrab = null;
+  const e = h.slGrab; h.slGrab = null; if (e) e.slBent = false;
   if (e) grabClear(e);
   if (e && e.state === 'pheld') { setState(e, 'idle'); e.ca = 'idle'; e.cfi = 0; e.z = 0; e.spin = 0; if (e.ai) e.ai.cd = .6; else e.cd = .6; }
 }
 function slThrow(h, e, vx, vz, dmg, spin, bowl) {
-  h.slGrab = null; h.slBehind = false; grabClear(e);
+  h.slGrab = null; h.slBehind = false; grabClear(e); e.slBent = false;
   e.state = 'ptoss'; e.st = 0; e.vx = vx; e.vy = 0; e.vz = vz; e.z = Math.max(e.z || 0, 4); e.tossDmg = dmg; e.tossSpin = spin; e.slBowl = !!bowl; e.slHit = null;
   slGain(h, dmg * 1.6);
 }
@@ -10877,6 +10877,8 @@ const SL_CT = {
   'grab:1': { at: 'waist', pose: 'lift', layer: 'front' },
   'grab:2': { at: 'waist', pose: 'lift', layer: 'behind' },
   'grab:3': { at: 'head', pose: 'inv', layer: 'front' },
+  'grab:4': { at: 'neck', pose: 'bent', layer: 'behind' },   // vaulting: she goes over a victim kept doubled over (SOR2)
+  'grab:5': { at: 'neck', pose: 'bent', layer: 'behind' },
   'grab:6': { at: 'waist', pose: 'hold', layer: 'front' },
   'grab:8': { at: 'waist', pose: 'bent', layer: 'front' },
   'kn:0':   { at: 'neck', pose: 'bent', layer: 'front' },
@@ -10953,14 +10955,14 @@ function slGrabUpd(h, dt) {
   if (ev === 'ddt' && held && q >= .27) slImpact(h, e, 'ddt');
   if (!first) return;
   switch (ev) {
-    case 'knee': if (held) { h.ghits++; if (p2HitHeld(e, 6)) slThrow(h, e, h.face * 160, 220, 1, 0); else slGain(h, 6 * 1.6); slTag('KNEE!', e.x, e.y - 180, .4); } break;
+    case 'knee': if (held) { e.slBent = true; h.ghits++; if (p2HitHeld(e, 6)) slThrow(h, e, h.face * 160, 220, 1, 0); else slGain(h, 6 * 1.6); slTag('KNEE!', e.x, e.y - 180, .4); } break;
     case 'head': if (held) { game.shake = 10; audio.hit(true); slTag('HEADBUTT!', e.x, e.y - 185, .7); slThrow(h, e, h.face * 300, 200, 12, 0, true); } break;
     case 'shove': if (held) { audio.hit(true); slTag('SHOVE!', e.x, e.y - 185, .6); slThrow(h, e, h.face * 520, 150, 11, 0, true); } break;
     case 'slam':   // the Russian leg sweep: both crash to the boards, the victim flat on her back in front of her
       if (held) { game.shake = 14; game.hitstop = .1; audio.thump(55, .35, .6); dust(e.x, e.y, 10); slTag('RUSSIAN LEG SWEEP!', e.x, e.y - 190, 1); slThrow(h, e, h.face * 70, 60, 17, h.face * 1.4); } break;
     case 'throwB': if (held) { audio.whiff(); slTag('SHOULDER THROW!', h.x, h.y - 195, .8); slThrow(h, e, -h.face * 380, 320, 18, -h.face * 3.2, true); } break;
     case 'over': audio.whiff(); break;
-    case 'vup': audio.whiff(); h.slV = { pose: 'hold', away: h.slBehind, layer: 'front' }; break;
+    case 'vup': audio.whiff(); h.slV = { away: h.slBehind }; break;   // pose / layer from SL_CT: doubled over, she goes over the top
     case 'vtop': break;
     case 'vland':
       if (held) { h.face = -h.face; h.x = e.x - h.face * 52; h.z = 0; h.slBehind = !h.slBehind; dust(h.x, h.y, 4); audio.thump(120, .08, .25); slTag(h.slBehind ? 'BEHIND YOU!' : 'VAULT!', h.x, h.y - 190, .6); }
@@ -11048,6 +11050,7 @@ function slHeld(e, dt) {
   const at = V.at || C.at || 'chest', layer = V.layer || C.layer || 'front';
   e.face = V.away ? h.face : -h.face;
   e.slPose = V.pose || C.pose || 'hold'; e.slLayer = layer;
+  if (e.slPose === 'hold' && e.slBent && !V.away) e.slPose = 'bent';   // once kneed, she stays doubled over in the hold (SOR2)
   e.spin = (V.spin || 0) + (tu.spin || 0) * h.face;
   if (e.slPose === 'inv' && e.frames.victim) e.spin -= Math.PI * (Math.sign(e.spin) || 1);   // the drawn upside-down frame is already inverted
   e.tilt = !slPoseFrame(e) && e.slPose === 'bent' ? .35 : 0;   // no doubled-over frame: lean the body forward
