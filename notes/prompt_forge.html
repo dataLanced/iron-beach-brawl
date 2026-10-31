@@ -58,6 +58,16 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
       <div class="row"><select id="preset" style="flex:1"></select><button class="alt" id="loadPreset">Load</button></div>
       <label for="cname">Name</label>
       <input type="text" id="cname" placeholder="Scarlett">
+      <details id="builder" style="margin-top:10px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--accent)">New character? Build the appearance line from parts</summary>
+        <div class="hint">Fill what you know; blanks are skipped. Tap <b>Write it</b> and the line below is composed in the order ChatGPT reads best: role, hair, eyes, face, outfit top to bottom, accessories, build.</div>
+        <div id="bParts"></div>
+        <label>Accessories</label>
+        <div class="chips" id="bAccs"></div>
+        <label for="bKeep">Must-keep colours (optional)</label>
+        <input type="text" id="bKeep" placeholder="the suit must stay silver-grey">
+        <div class="row" style="margin-top:8px"><button id="bWrite">Write it</button><button class="alt" id="bSave">Save as a cast member</button><span class="ok" id="bMsg"></span></div>
+      </details>
       <label for="cdesc">Appearance (what must stay the same in every box)</label>
       <textarea id="cdesc" placeholder="an adult woman street brawler with long dark brown hair, pink long-sleeve crop top with white cuffs and red tie, pink leggings, barefoot, very muscular chibi build"></textarea>
       <label for="cstyle">Style line</label>
@@ -199,6 +209,54 @@ function renderBoxes() {
     d.querySelector('#air' + i).onchange = e => { bx.air = e.target.checked; build(); };
   });
 }
+const PARTS = [
+  ['bRole', 'Role', ['street brawler', 'kunoichi', 'boxer', 'wrestler', 'sumo', 'lifeguard', 'biker', 'nurse', 'schoolgirl brawler', 'cop', 'gang boss', 'cyborg', 'idol', 'surfer', 'mercenary']],
+  ['bHairLen', 'Hair length / style', ['short bob', 'short spiky', 'shoulder-length', 'long straight', 'long wavy', 'high ponytail', 'twin-tails', 'braided', 'bun', 'undercut', 'shaved sides', 'afro']],
+  ['bHairCol', 'Hair colour', ['black', 'dark brown', 'light brown', 'blonde', 'platinum', 'red', 'auburn', 'pink', 'purple', 'blue', 'green', 'white', 'silver', 'two-tone']],
+  ['bEyes', 'Eyes', ['sharp blue', 'brown', 'green', 'amber', 'grey', 'red', 'violet', 'heterochromia', 'narrow and fierce', 'big and round']],
+  ['bSkin', 'Skin', ['fair', 'light tan', 'tan', 'olive', 'brown', 'dark brown', 'deep']],
+  ['bFace', 'Expression / face', ['confident smirk', 'serious scowl', 'cocky grin', 'calm and cold', 'playful wink', 'wild grin', 'scar across the cheek', 'freckles', 'face paint', 'cloth face mask']],
+  ['bTop', 'Top', ['long-sleeve crop top', 'sleeveless crop top', 'sports bra', 'tank top', 'sailor top', 'leather jacket over a top', 'hoodie', 'one-piece wrestling suit', 'swimsuit one-piece', 'gi top', 'bodysuit', 'vest']],
+  ['bBottom', 'Bottom', ['leggings', 'shorts', 'pleated skirt', 'cargo pants', 'jeans', 'gi pants', 'bike shorts', 'wrestling tights', 'mini skirt', 'tracksuit pants']],
+  ['bFeet', 'Feet', ['barefoot', 'sneakers with white socks', 'boots', 'wrestling boots', 'sandals', 'heels', 'tabi boots', 'geta']],
+  ['bCol', 'Main outfit colour', ['pink and white', 'red and black', 'black and gold', 'blue and white', 'green', 'purple', 'orange', 'yellow', 'silver-grey', 'teal', 'navy', 'white']],
+];
+const ACCS = ['red tie', 'headband', 'gold headband', 'hand wraps', 'fingerless gloves', 'boxing gloves', 'sunglasses', 'goggles', 'choker', 'bandana', 'cap', 'earrings', 'belt', 'knee pads', 'wrist guards', 'whistle', 'chain necklace', 'face mask', 'bandages', 'tattoo on the arm'];
+{
+  const host = $('bParts');
+  for (const [id, lab, opts] of PARTS) {
+    const w = document.createElement('div'); w.innerHTML = `<label for="${id}">${lab}</label><div class="row"><select id="${id}" style="flex:1"><option value="">(skip)</option>${opts.map(o => `<option>${o}</option>`).join('')}<option value="__other">other…</option></select><input type="text" id="${id}_t" placeholder="type your own" style="flex:1" hidden></div>`;
+    host.appendChild(w);
+    const sel = w.querySelector('select'), txt = w.querySelector('input'); sel.onchange = () => { txt.hidden = sel.value !== '__other'; if (!txt.hidden) txt.focus(); };
+  }
+  const ah = $('bAccs');
+  for (const a of ACCS) { const l = document.createElement('label'); l.style.cssText = 'display:inline-flex;gap:4px;align-items:center;text-transform:none;letter-spacing:0;font-size:12px;margin:0;border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--ink)'; l.innerHTML = `<input type="checkbox" value="${a}"> ${a}`; ah.appendChild(l); }
+  const ao = document.createElement('input'); ao.type = 'text'; ao.id = 'bAccOther'; ao.placeholder = 'other accessories'; ao.style.cssText = 'width:100%;margin-top:6px'; ah.after(ao);
+}
+const partVal = id => { const sel = $(id), t = $(id + '_t'); return sel.value === '__other' ? t.value.trim() : sel.value; };
+$('bWrite').onclick = () => {
+  const v = partVal, parts = [];
+  parts.push('an adult woman ' + (v('bRole') || 'fighter'));
+  const hair = [v('bHairCol'), v('bHairLen')].filter(Boolean).join(' '); if (hair) parts.push(hair + ' hair');
+  if (v('bEyes')) parts.push(v('bEyes') + ' eyes');
+  if (v('bSkin')) parts.push(v('bSkin') + ' skin');
+  if (v('bFace')) parts.push(v('bFace'));
+  const col = v('bCol'); const outfit = [v('bTop'), v('bBottom')].filter(Boolean).join(' and '); if (outfit) parts.push((col ? col + ' ' : '') + outfit);
+  if (v('bFeet')) parts.push(v('bFeet'));
+  const accs = [...document.querySelectorAll('#bAccs input:checked')].map(i => i.value); const ao = $('bAccOther').value.trim(); if (ao) accs.push(ao); if (accs.length) parts.push(accs.join(', '));
+  let line = parts.join(', ');
+  const keep = $('bKeep').value.trim(); if (keep) line += ' (' + keep + ')';
+  $('cdesc').value = line; build(); $('bMsg').textContent = 'Written below'; setTimeout(() => $('bMsg').textContent = '', 2000);
+};
+$('bSave').onclick = () => {
+  const name = $('cname').value.trim(); if (!name || !$('cdesc').value.trim()) { $('bMsg').textContent = 'Needs a name and an appearance'; return; }
+  const key = 'u_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  CAST[key] = { name, desc: $('cdesc').value.trim(), style: sp.value };
+  try { const u = JSON.parse(localStorage.getItem('forgeCast') || '{}'); u[key] = CAST[key]; localStorage.setItem('forgeCast', JSON.stringify(u)); } catch (e) {}
+  if (![...pre.options].some(o => o.value === key)) { const o = document.createElement('option'); o.value = key; o.textContent = name; pre.appendChild(o); }
+  pre.value = key; $('bMsg').textContent = 'Saved on this device'; setTimeout(() => $('bMsg').textContent = '', 2000);
+};
+try { const u = JSON.parse(localStorage.getItem('forgeCast') || '{}'); for (const k in u) { CAST[k] = u[k]; const o = document.createElement('option'); o.value = k; o.textContent = u[k].name; pre.appendChild(o); } } catch (e) {}
 function desc() { let d = $('cdesc').value.trim() || '[describe the character]'; if ($('adult').checked && !/adult/i.test(d)) d = 'an adult woman, ' + d.replace(/^(an?\s+)/i, ''); return d + (BUILDS[$('buildPick').value] || ''); }
 function build() {
   const name = $('cname').value.trim() || 'the character', style = $('cstyle').value.trim(), n = nBoxes();
