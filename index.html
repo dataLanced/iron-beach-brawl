@@ -2016,7 +2016,7 @@ function render() {
     ctx.restore(); return;
   }
   // draw order by depth; a held hero sits just behind her grabber so the arms wrap in front
-  const key = f => f.state === 'held' && f.heldBy ? f.heldBy.y + ((f.heldBy.state === 'suplex' && f.heldBy.fi > 0) || f.heldBy.holdFront ? .1 : -.1) : f.y;
+  const key = f => f.state === 'held' && f.heldBy ? f.heldBy.y + ((f.heldBy.state === 'suplex' && f.heldBy.fi > 0) || f.heldBy.holdFront || (typeof grabArmOf === 'function' && grabArmOf(f.heldBy)) ? .1 : -.1) : f.y;   // a grabber with a front-arm layer: the body goes in front, her arm on top
   const list = (game.watch ? game.enemies.slice() : [hero, ...game.enemies]).sort((a, b) => key(a) - key(b));
   drawTelegraphs();
   drawShots();
@@ -5307,7 +5307,7 @@ function boxerDefend(t, hit, att) {
    Slow, wide and armoured through her own attacks. Hundred-hand slaps (a blur of palms), a big two-hand palm push,
    the tachiai shoulder charge from across the screen, the shiko stomp quake, a butt drop on anyone left lying down,
    a pinch of salt to the eyes, and three grabs: belly bump, bear hug into an overhead slam, belt twist throw. */
-CY.sumo = { hp: 210, speed: 104, guard: 0, poise: 70, dmg: 1, height: 137, score: 3000, escape: 7 };
+CY.sumo = { hp: 210, speed: 104, guard: 0, poise: 70, dmg: 1, height: 176, score: 3000, escape: 7 };   // 176: the biggest body in the cast after Vex (was 137)
 VARIANT_HEX.sumo = '#f2d2b0';
 function makeSumo(x, y, face, extra) {
   return makeFighter(Object.assign({
@@ -5326,7 +5326,7 @@ const SM = {
 };
 function smSet(e, s) { setState(e, s); e.ca = 'idle'; e.cfi = 0; e.vx = 0; e.vy = 0; e.armor = false; e.holdFront = false; e.rot = 0; e.tilt = 0; }
 // hold the grabbed body in front of her: dx in her frame pixels, z height off the floor in screen px, spin
-function smHold(e, dx, z, spin) { hero.x = e.x + e.face * dx * e.scale; hero.y = e.y + .5; hero.z = z; hero.spin = (spin || 0) * hero.face; }
+function smHold(e, dx, z, spin) { hero.x = e.x + e.face * dx * e.scale; hero.y = e.y + .5; hero.z = z * CY.sumo.height / 137; hero.spin = (spin || 0) * hero.face; }
 function smSlapFx(e) {   // the hundred hands: palm afterimages flickering in front of her at different heights
   for (let i = 0; i < 2; i++) game.fx.push({ k: 'smpalm', x: e.x + e.face * (70 + Math.random() * 40) * e.scale / .69, y: e.y, z: 60 + Math.random() * 70, f: e.face, t: 0, life: .14,
     draw(fx, sx) { const q = fx.t / fx.life; ctx.save(); ctx.globalAlpha = .55 * (1 - q); ctx.fillStyle = '#f6c9a6'; ctx.strokeStyle = '#7a4a34'; ctx.lineWidth = 2;
@@ -9618,7 +9618,7 @@ CY.bobbie = { hp: 160, speed: 110, guard: 0, poise: 50, dmg: 1, height: 138, sco
 VARIANT_HEX.bobbie = '#e04a5a';
 function makeBobbie(x, y, face, extra) {
   return makeFighter(Object.assign({
-    cls: 'bobbie', variant: 'bobbie', sheet: 'bobbie', frames: BBFRAMES, scale: 1, ownDown: true,
+    cls: 'bobbie', variant: 'bobbie', sheet: 'bobbie', frames: BBFRAMES, scale: 1.12, ownDown: true,   // 1.12: up to the cast's ~155 px
     x, y, face, hp: CY.bobbie.hp, maxHp: CY.bobbie.hp, speed: CY.bobbie.speed, poise: 0, inv: 0, ca: 'idle', cfi: 0, off: 92, cd: .8 + Math.random() * .6, upcd: 1.5, kkcd: 2, pmcd: 1.5, kiLv: 0, medcd: 2 + Math.random() * 2, grabcd: 2 + Math.random() * 2, jmpcd: 1.5, jkcd: 2, kdcd: 1.5, stcd: 2, swcd: 1.5,
   }, extra || {}));
 }
@@ -15701,6 +15701,48 @@ const WATCH_RP = { replay: { x: W / 2 - 230, y: 212, w: 210, h: 40 }, save: { x:
     if (game.mode === 'replay') return rpKey(e) || _vk(e);
     if (game.mode === 'watchend' && !e.repeat) { if (e.key === 'r' || e.key === 'R') { rpOpen(); e.preventDefault(); return true; } if (e.key === 's' || e.key === 'S') { rpSave(); e.preventDefault(); return true; } }
     return _vk(e);
+  };
+}
+/* ---------- GRAB POLISH: front-arm layers for every grabber ----------
+   For each grabber's hold frames: the near arm(s) as polygons in that frame's own pixels (x from its left edge, y from
+   its top). While she holds someone on such a frame, the held body is drawn in front of her, then those arm pixels
+   are drawn again on top - so the hands sit on the body instead of behind it. Keyed by class: 'row:frame'. */
+const GARMS = {
+  metal2: {
+    'grab:0':    [[[55, 38], [118, 26], [126, 44], [112, 60], [60, 64]]],
+    'hbutt:0':   [[[80, 46], [126, 48], [130, 66], [86, 74]]],
+    'hbfin:0':   [[[80, 46], [128, 50], [132, 68], [86, 74]]],
+    'knee:0':    [[[38, 36], [78, 32], [82, 62], [42, 68]]],
+    'spine:0':   [[[50, 32], [93, 28], [96, 54], [52, 58]]],
+    'spine:1':   [[[52, 26], [104, 22], [106, 47], [54, 52]]],
+    'spine:2':   [[[58, 48], [94, 50], [94, 80], [58, 80]]],
+    'hiptoss:0': [[[55, 30], [106, 28], [108, 54], [57, 58]]],
+    'hiptoss:1': [[[50, 28], [102, 20], [104, 52], [55, 54]]],
+    'press:0':   [[[14, 0], [37, 0], [40, 28], [14, 28]], [[60, 0], [82, 0], [82, 28], [58, 28]]],
+    'press:1':   [[[14, 0], [37, 0], [40, 28], [14, 28]], [[60, 0], [82, 0], [82, 28], [58, 28]]],
+    'press:2':   [[[45, 28], [86, 26], [90, 56], [48, 60]]],
+  },
+};
+function grabArmOf(g) {
+  if (!g || !g.frames) return null;
+  const T = GARMS[g.cls || g.sheet]; if (!T) return null;
+  const [a, i] = frameOf(ghostOf(g)); const polys = T[a + ':' + i];
+  return polys ? { a, i, polys } : null;
+}
+{
+  const _df = drawFighter;
+  drawFighter = function (f) {
+    _df(f);
+    if (!f || f.state !== 'held' || !f.heldBy) return;
+    const g = f.heldBy, A = grabArmOf(g); if (!A) return;
+    const fr = g.frames[A.a] && g.frames[A.a][A.i], img = sheets[g.sheet]; if (!fr || !img) return;
+    ctx.save(); spriteTransform(g, g.x - game.cam, g.y);
+    ctx.beginPath();
+    for (const P of A.polys) { ctx.moveTo(P[0][0] - fr.ax, P[0][1] - fr.ay); for (let k = 1; k < P.length; k++) ctx.lineTo(P[k][0] - fr.ax, P[k][1] - fr.ay); ctx.closePath(); }
+    ctx.clip();
+    if (g.pixel) ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, Math.floor(fr.x), fr.y || 0, Math.ceil(fr.w), fr.h, -fr.ax, -fr.ay, Math.ceil(fr.w), fr.h);
+    ctx.restore();
   };
 }
 /* ---------- GRAB LAB (grab tuner) ----------
