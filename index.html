@@ -8818,7 +8818,7 @@ CY.metal2 = { hp: 190, speed: 112, guard: 0, poise: 50, dmg: 1, height: 150, sco
 VARIANT_HEX.metal2 = '#c8d0dc';
 function makeMetal2(x, y, face, extra) {
   return makeFighter(Object.assign({
-    cls: 'metal2', variant: 'metal2', sheet: 'metal2', frames: M2FRAMES, scale: 1, ownDown: true,
+    cls: 'metal2', variant: 'metal2', sheet: 'metal2', frames: M2FRAMES, scale: 1.13, ownDown: true,   // 1.13: her art is drawn small; this brings her to the cast's ~158 px
     x, y, face, hp: CY.metal2.hp, maxHp: CY.metal2.hp, speed: CY.metal2.speed,
     cd: 1 + Math.random(), rushcd: 2 + Math.random() * 2, ctcd: 3 + Math.random() * 2, rkcd: 1.5, grabcd: 2 + Math.random() * 2, poise: 0, inv: 0, off: 70 + Math.random() * 30, ca: 'idle', cfi: 0,
   }, extra || {}));
