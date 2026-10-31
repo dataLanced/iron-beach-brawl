@@ -122,7 +122,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
     <div class="card" style="margin-top:18px" id="tplCard">
       <h2>4 · Template</h2>
       <div class="hint">1536×1024, the head line at 22% and the floor line at 88% of each box. Upload the character's stance cut-out (transparent PNG) and it's placed in box 1 at the right size. Long-press or right-click the image to save it, then attach it with the prompt.</div>
-      <div class="row" style="margin-top:8px"><input type="file" id="stance" accept="image/png,image/webp"><button class="alt" id="redraw">Redraw</button></div>
+      <div class="row" style="margin-top:8px"><input type="file" id="stance" accept="image/png,image/webp,image/jpeg"><button class="alt" id="redraw">Redraw</button></div>
+      <div class="hint" id="figHint" hidden>That image has several figures or a solid background. Tap the one to use as the stance; the background is keyed out automatically.</div>
+      <div class="chips" id="figs"></div>
       <img id="tpl" alt="Sprite sheet template">
     </div>
   </div>
@@ -289,7 +291,34 @@ $('copy').onclick = async () => { const t = $('out').textContent; try { await na
 ['cname', 'cdesc', 'cstyle', 'motion', 'angle', 'dnotes', 'adult', 'imgTool', 'vidTool'].forEach(id => $(id).addEventListener('input', build));
 // ---- template drawing (same geometry as tools/mktpl.py)
 let stanceImg = null;
-$('stance').onchange = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { stanceImg = img; drawTpl(); }; img.src = URL.createObjectURL(f); };
+$('stance').onchange = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => prepStance(img); img.src = URL.createObjectURL(f); };
+// a design sheet or a photo-style export: key the background from the corner colour, split into figures, let the user pick one
+function prepStance(img) {
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; const x = c.getContext('2d'); x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height;
+  let transparent = 0; for (let i = 3; i < p.length; i += 4 * 97) if (p[i] < 20) transparent++;
+  const hasAlpha = transparent > (p.length / (4 * 97)) * .05;
+  if (!hasAlpha) {   // solid background: sample the four corners, remove everything within tolerance (flood from the edges)
+    const corners = [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].map(([cx, cy]) => { const i = (cy * W + cx) * 4; return [p[i], p[i + 1], p[i + 2]]; });
+    const bg = corners[0].map((_, k) => Math.round(corners.reduce((s, v) => s + v[k], 0) / 4));
+    const tol = 48, near = i => Math.abs(p[i] - bg[0]) + Math.abs(p[i + 1] - bg[1]) + Math.abs(p[i + 2] - bg[2]) < tol;
+    const seen = new Uint8Array(W * H), stack = [];
+    for (let xx = 0; xx < W; xx++) { stack.push(xx, (H - 1) * W + xx); } for (let yy = 0; yy < H; yy++) { stack.push(yy * W, yy * W + W - 1); }
+    while (stack.length) { const q = stack.pop(); if (seen[q]) continue; const i = q * 4; if (!near(i)) continue; seen[q] = 1; p[i + 3] = 0; const qx = q % W, qy = (q / W) | 0; if (qx > 0) stack.push(q - 1); if (qx < W - 1) stack.push(q + 1); if (qy > 0) stack.push(q - W); if (qy < H - 1) stack.push(q + W); }
+    x.putImageData(d, 0, 0);
+  }
+  // split into figures by empty columns
+  const col = new Uint8Array(W); for (let xx = 0; xx < W; xx++) for (let yy = 0; yy < H; yy += 2) if (p[(yy * W + xx) * 4 + 3] > 40) { col[xx] = 1; break; }
+  const runs = []; let start = -1; for (let xx = 0; xx <= W; xx++) { const on = xx < W && col[xx]; if (on && start < 0) start = xx; if (!on && start >= 0) { if (xx - start > W * .04) runs.push([start, xx]); start = -1; } }
+  const figs = $('figs'); figs.innerHTML = ''; $('figHint').hidden = runs.length < 2 && hasAlpha;
+  if (runs.length < 2) { stanceImg = c; drawTpl(); return; }
+  runs.forEach(([a, b], k) => {
+    const f = document.createElement('canvas'); f.width = b - a; f.height = H; f.getContext('2d').drawImage(c, a, 0, b - a, H, 0, 0, b - a, H);
+    const btn = document.createElement('button'); btn.textContent = 'Figure ' + (k + 1); btn.onclick = () => { stanceImg = f; drawTpl(); [...figs.children].forEach(o => o.style.background = ''); btn.style.background = 'var(--sun)'; };
+    figs.appendChild(btn);
+  });
+  figs.firstChild.click();
+}
 $('redraw').onclick = drawTpl;
 function drawTpl() {
   const n = nBoxes(), cols = n === 10 ? 5 : 3, rows = 2, W = 1536, H = 1024, bw = W / cols, bh = H / rows;
