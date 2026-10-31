@@ -4,6 +4,15 @@ Attach this file at the start of the new project. It is written for Claude: what
 design rules already settled, and the technical mistakes not to repeat. The old project lives at
 github.com/dataLanced/iron-beach-brawl (read it for reference code; do not copy its structure).
 
+## 0. Principle: build editors and systems, not gameplay
+Gameplay comes from systems and editors layered together. Claude builds the tooling; the user's design judgment
+drives the iteration. Every new mechanic ships with a way to tune it live, on a phone, without asking Claude:
+- Grab Lab (exists in Iron Beach Brawl): hand/contact offsets per grab frame and victim type, COPY to bake in.
+- Hit Lab: per-move timing, hitboxes, damage, hit-stop, knockback, launch, spark size.
+- AI Lab: aggression, attack tokens, guard-reading, grab chance per enemy; watch mode to test the result.
+- Stage/Wave editor: enemy groups, spawn points, pacing.
+Tuned values are data (JSON), copied back to Claude to bake, never hand-edited in code.
+
 ## 1. Working with the user
 - Mostly on a phone. Keep replies scannable; always SEND the files they need (templates, refs, screenshots) next to
   the prompts so they never scroll back. Put every prompt in a code block.
