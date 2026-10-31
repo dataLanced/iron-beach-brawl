@@ -1716,8 +1716,9 @@ function drawHUD() {
     ctx.font = '700 15px Silkscreen, monospace'; ctx.fillStyle = `rgba(246,236,216,${a})`;
     ctx.fillText('PRESS ATTACK OR JUMP TO RESPAWN', W / 2, py + 74);
   }
-  if (game.comboCount > 1) {
-    ctx.save(); ctx.translate(120, 150);   // below the last-hit enemy panel const s = 1 + Math.max(0, game.comboTimer - 1.2) * 2; ctx.scale(s, s);
+  if (typeof drawCombo === 'function') drawCombo();
+  else if (game.comboCount > 1) {
+    ctx.save(); ctx.translate(120, 150); const s = 1 + Math.max(0, game.comboTimer - 1.2) * 2; ctx.scale(s, s);
     ctx.textAlign = 'center'; ctx.font = '30px Bungee, Impact, sans-serif';
     ctx.fillStyle = '#2b1f52'; ctx.fillText(game.comboCount + ' HITS', 3, 3);
     ctx.fillStyle = '#ffd36b'; ctx.fillText(game.comboCount + ' HITS', 0, 0); ctx.restore();
@@ -16099,6 +16100,107 @@ if (typeof slDowned === 'function') {
     return _sd(h, reach) || game.enemies.find(e => e.state === 'jug' && e.jg === 'down' && e.hp > 0 && (e.x - h.x) * h.face > -20 && (e.x - h.x) * h.face < reach && Math.abs(e.y - h.y) < 30);
   };
 }
+/* ---------- FEEL: combo feedback, super flash, afterimages, enemy telegraphs, crowd pacing ----------
+   Tunables in FEEL (Sandbox > FEEL tab edits the multipliers; these are the base values). */
+const FEEL = { maxAtk: 2, telegraph: .16, ghostEvery: .04, ghostLife: .22 };
+// ---- combo: damage tally, colour tiers, end-of-combo rating with damage and score
+const COMBO = { dmg: 0, score0: 0, peak: 0, endT: -9, end: null, popT: 0 };
+const COMBO_TIERS = [[0, '#ffffff'], [5, '#ffd36b'], [10, '#ff9a3c'], [18, '#7cf0b0'], [30, '#7fd6ff']];
+function comboColor(n) { let c = COMBO_TIERS[0][1]; for (const [k, col] of COMBO_TIERS) if (n >= k) c = col; return c; }
+function comboRating(n, dmg) { return n >= 30 ? 'BRUTAL!' : n >= 18 ? 'SUPER!' : n >= 10 ? 'GREAT!' : n >= 5 ? 'NICE!' : null; }
+{
+  const _dmg = damage;
+  damage = function (t, hit, att) {
+    const fromHero = att && hero && (att === hero || att.slOwner === hero) && t && t !== hero && !t.__real;
+    const c0 = game.comboCount, hp0 = t && t.hp, s0 = game.score;
+    const r = _dmg(t, hit, att);
+    if (fromHero && !game.watch && game.comboCount > c0) {
+      if (c0 === 0) { COMBO.dmg = 0; COMBO.score0 = s0; }
+      COMBO.dmg += Math.max(0, hp0 - t.hp); COMBO.peak = game.comboCount; COMBO.popT = game.t;
+    }
+    return r;
+  };
+}
+function drawCombo() {
+  const n = game.comboCount;
+  if (n > 1) {
+    const age = game.t - COMBO.popT, s = 1 + Math.max(0, .18 - age) * 3;
+    ctx.save(); ctx.translate(70, 150); ctx.scale(s, s); ctx.textAlign = 'left';
+    ctx.font = 'italic 40px Bungee, Impact, sans-serif'; ctx.fillStyle = '#2b1f52'; ctx.fillText(n, 3, 3); ctx.fillStyle = comboColor(n); ctx.fillText(n, 0, 0);
+    const w = ctx.measureText(n).width; ctx.font = 'italic 18px Bungee, Impact, sans-serif'; ctx.fillStyle = '#2b1f52'; ctx.fillText('hits', w + 9, 3); ctx.fillStyle = comboColor(n); ctx.fillText('hits', w + 6, 0);
+    ctx.restore();
+  }
+  if (COMBO.end && game.t - COMBO.endT < 1.6) {
+    const p = (game.t - COMBO.endT) / 1.6, a = p < .75 ? 1 : 1 - (p - .75) / .25, rise = Math.min(1, p * 6) * 8;
+    ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'left';
+    ctx.font = 'italic 26px Bungee, Impact, sans-serif'; ctx.fillStyle = '#2b1f52'; ctx.fillText(COMBO.end.txt, 73, 150 - rise + 3); ctx.fillStyle = COMBO.end.col; ctx.fillText(COMBO.end.txt, 70, 150 - rise);
+    ctx.font = '700 14px Silkscreen, monospace'; ctx.fillStyle = '#f6ecd8'; ctx.fillText(COMBO.end.dmg + ' damage  ·  +' + COMBO.end.score, 72, 170 - rise);
+    ctx.restore();
+  }
+}
+{
+  const _upd = update;
+  update = function (dt) {
+    const c0 = game.comboCount;
+    _upd(dt);
+    if (c0 > 1 && game.comboCount === 0 && !game.watch) {   // the combo just ended: rate it
+      const r = comboRating(c0, COMBO.dmg);
+      if (r) { COMBO.end = { txt: r, col: comboColor(c0), dmg: COMBO.dmg, score: Math.max(0, game.score - COMBO.score0) }; COMBO.endT = game.t; }
+      COMBO.dmg = 0;
+    }
+  };
+}
+// ---- super flash: a white wash when a special starts
+function superFlash(col) { game.fx.push({ k: 'superflash', x: 0, y: 0, t: 0, life: .22, col: col || '255,255,255', draw(fx) { const p = fx.t / fx.life; ctx.save(); ctx.fillStyle = `rgba(${fx.col},${p < .25 ? .85 : .85 * (1 - (p - .25) / .75)})`; ctx.fillRect(-game.cam - 50, -50, W + STAGE_LEN, H + 100); ctx.restore(); } }); }
+if (typeof slSpecialStart === 'function') { const _ss = slSpecialStart; slSpecialStart = function (h, state) { _ss(h, state); superFlash(state === 'slfury' ? '255,120,160' : '255,255,255'); }; }
+// ---- afterimages: ghosts behind fast player moves
+const GHOST_STATES = new Set(['slrun', 'sldodge', 'slrush', 'sltorn', 'slburst', 'slfury', 'sltech', 'slslide', 'sldropk', 'run', 'dash']);
+function ghostOf2(f) {
+  const [anim, idx] = frameOf(ghostOf(f)), fr = f.frames[anim] && f.frames[anim][idx]; if (!fr) return;
+  game.fx.push({ k: 'ghost', x: f.x, y: f.y, t: 0, life: FEEL.ghostLife, z: f.z || 0, face: f.face, scale: f.scale || 1, sheet: f.sheet, fr, draw(fx) {
+    const p = fx.t / fx.life; ctx.save(); ctx.globalAlpha = .35 * (1 - p); ctx.translate(fx.x - game.cam, fx.y - fx.z); ctx.scale(fx.face * fx.scale, fx.scale);
+    ctx.filter = 'brightness(1.5) saturate(.3)'; ctx.drawImage(sheets[fx.sheet], Math.floor(fx.fr.x), fx.fr.y || 0, Math.ceil(fx.fr.w), fx.fr.h, -fx.fr.ax, -fx.fr.ay, Math.ceil(fx.fr.w), fx.fr.h); ctx.restore(); } });
+}
+{
+  const _uh = updateHero;
+  updateHero = function (dt) {
+    _uh(dt);
+    const h = hero; if (!h || game.watch) return;
+    if (GHOST_STATES.has(h.state) || (h.state === 'idle' && (h.running || 0) > 0)) { h.ghostT = (h.ghostT || 0) + dt; if (h.ghostT >= FEEL.ghostEvery) { h.ghostT = 0; ghostOf2(h); } } else h.ghostT = 0;
+  };
+}
+// ---- enemy telegraph: a bright pulse the instant an enemy commits to an attack, and crowd pacing (attack tokens)
+const TWIN_ATK = new Set(['knee', 'combo', 'grab', 'holding', 'suplex', 'pbomb', 'pile', 'crush', 'spine', 'jump']);
+const feelAtk = e => !e.cls ? TWIN_ATK.has(e.state) : typeof npcAttacking === 'function' ? npcAttacking(e) : !['idle', 'walk', 'step', 'backwalk', 'hurt', 'down', 'ko', 'held', 'pheld', 'ptoss', 'jug', 'dizzy'].includes(e.state);
+{
+  const _ue = updateEnemy;
+  updateEnemy = function (e, dt) {
+    const was = e.__atk;
+    _ue(e, dt);
+    const now = e.state !== 'ko' && !(e.delay > 0) && feelAtk(e) && !['pheld', 'ptoss', 'jug', 'hurt', 'down', 'held', 'dizzy', 'nguard', 'ncrush', 'taunt', 'flex', 'gloat', 'powerup', 'victory'].includes(e.state);
+    if (now && !was && !game.watch) e.teleT = FEEL.telegraph;
+    e.__atk = now;
+    if (e.teleT > 0) e.teleT -= dt;
+  };
+  const _df = drawFighter;
+  drawFighter = function (f) {
+    _df(f);
+    if (!f || !(f.teleT > 0) || f.delay > 0 || f.hidden) return;
+    const [anim, idx] = frameOf(ghostOf(f)), fr = f.frames[anim] && f.frames[anim][idx]; if (!fr || !sheets[f.sheet]) return;
+    ctx.save(); spriteTransform(f, f.x - game.cam, f.y); ctx.globalAlpha = .55 * (f.teleT / FEEL.telegraph); if (f.pixel) ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(whiteSheet(f.sheet), Math.floor(fr.x), fr.y || 0, Math.ceil(fr.w), fr.h, -fr.ax, -fr.ay, Math.ceil(fr.w), fr.h); ctx.restore();
+  };
+  // attack tokens: when the cap is reached, the others hold their swing a beat (the Sandbox AI tab's limit overrides)
+  const _upd2 = update;
+  update = function (dt) {
+    _upd2(dt);
+    if (game.mode !== 'play' || game.watch || !hero) return;
+    const cap = game.sandbox && typeof SBX !== 'undefined' ? SBX.maxAtk : FEEL.maxAtk; if (!(cap > 0)) return;
+    let n = 0; for (const e of game.enemies) if (e.__atk) n++;
+    if (n < cap) return;
+    for (const e of game.enemies) { if (e.state === 'ko' || e.__atk) continue; if (typeof e.cd === 'number') e.cd = Math.max(e.cd, .2); if (e.ai) e.ai.cd = Math.max(e.ai.cd, .2); }
+  };
+}
 /* ---------- SANDBOX (title screen > SANDBOX) ----------
    A test bench for moves, hit feel and enemy behaviour. Everything is tuned live and saved on this device;
    COPY puts the changes on the clipboard to paste back to Claude, who bakes them into the game.
@@ -16150,7 +16252,7 @@ function sbxResetMove(pcKey, id) {
   if (SBX.moves[pcKey]) delete SBX.moves[pcKey][id];
 }
 function sbxSave() { try { localStorage.setItem('ibb-sbx', JSON.stringify({ feel: SBX.feel, ai: SBX.ai, maxAtk: SBX.maxAtk, moves: SBX.moves, jug: SBX.jug })); } catch (e) {} }
-function sbxLoad() { try { const d = JSON.parse(localStorage.getItem('ibb-sbx') || '{}'); Object.assign(SBX.feel, d.feel || {}); SBX.ai = d.ai || {}; SBX.maxAtk = d.maxAtk || 0; SBX.moves = d.moves || {}; SBX.jug = d.jug || {}; } catch (e) {} }
+function sbxLoad() { try { const d = JSON.parse(localStorage.getItem('ibb-sbx') || '{}'); Object.assign(SBX.feel, d.feel || {}); SBX.ai = d.ai || {}; SBX.maxAtk = d.maxAtk == null ? (typeof FEEL !== 'undefined' ? FEEL.maxAtk : 2) : d.maxAtk; SBX.moves = d.moves || {}; SBX.jug = d.jug || {}; } catch (e) {} }
 const JUG0 = typeof JUG !== 'undefined' ? Object.assign({}, JUG) : {};
 sbxSnap(); sbxLoad(); sbxApplyMoves(); if (typeof JUG !== 'undefined') Object.assign(JUG, SBX.jug);
 
@@ -16295,7 +16397,7 @@ function sbxUI() {
     h += row(sbxB('freset', 'RESET FEEL') + ' <span style="color:#a99cc8">applies to every fight, not just the sandbox</span>');
   } else {
     const kinds = [...new Set(game.enemies.map(sbxKind))];
-    h += row(`MAX ATTACKERS AT ONCE ${sbxNum('a:max', SBX.maxAtk, 1)} <span style="color:#a99cc8">(0 = no limit)</span>`);
+    h += row(`MAX ATTACKERS AT ONCE ${sbxNum('a:max', SBX.maxAtk, 1)} <span style="color:#a99cc8">(0 = no limit; the game itself uses ${typeof FEEL !== 'undefined' ? FEEL.maxAtk : 2})</span>`);
     for (const k of kinds) { const T = SBX.ai[k] || {}; h += row(`<b style="color:#7fd6ff;min-width:120px">${k.toUpperCase()}</b> SPEED × ${sbxNum('ai:' + k + ':spd', T.spd || 1, .1)} AGGRESSION × ${sbxNum('ai:' + k + ':aggr', T.aggr || 1, .1)} DAMAGE × ${sbxNum('ai:' + k + ':dmg', T.dmg || 1, .1)}`); }
     h += row(sbxB('aireset', 'RESET AI') + ' <span style="color:#a99cc8">sandbox only · aggression speeds up or slows down their attack cooldowns</span>');
   }
