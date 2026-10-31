@@ -1,0 +1,243 @@
+<title>Sprite Prompt Forge</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a two-column workbench (form left, prompt + template right) that stacks on a phone; arcade-cabinet palette from the game */
+:root {
+  --bg: #f3eee4; --panel: #ffffff; --ink: #1b1530; --muted: #6b6480; --line: #d9d2e6;
+  --accent: #ff5d6c; --sun: #ff9a3c; --ok: #2f9e5f; --code: #1b1530; --codefg: #f6ecd8;
+  --display: "Bungee", "Impact", sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1b1530; --panel: #2a2146; --ink: #f6ecd8; --muted: #a99cc8; --line: #4a3d73; --code: #110d20; --codefg: #f6ecd8; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #1b1530; --panel: #2a2146; --ink: #f6ecd8; --muted: #a99cc8; --line: #4a3d73; --code: #110d20; --codefg: #f6ecd8; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); margin: 0; padding-block: 18px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-family: var(--display); font-weight: 400; font-size: clamp(22px, 4vw, 34px); margin: 0 0 4px; letter-spacing: .01em; }
+h1 span { color: var(--accent); }
+.sub { color: var(--muted); margin: 0 0 18px; max-width: 65ch; }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; max-width: 1200px; margin: 0 auto; }
+@media (max-width: 860px) { .wrap { grid-template-columns: 1fr } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.card h2 { font-family: var(--display); font-weight: 400; font-size: 15px; letter-spacing: .04em; margin: 0 0 12px; color: var(--sun); }
+label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 10px 0 4px; }
+input[type=text], textarea, select { width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; }
+textarea { min-height: 70px; resize: vertical; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row > * { min-width: 0; }
+button { font: 600 13px var(--body); color: #1b1530; background: var(--sun); border: 0; border-radius: 7px; padding: 8px 12px; cursor: pointer; }
+button.alt { background: var(--line); color: var(--ink); }
+button.go { background: var(--accent); color: #fff; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tabs button { background: var(--line); color: var(--ink); }
+.tabs button[aria-pressed=true] { background: var(--sun); color: #1b1530; }
+.box { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 8px; display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 8px; align-items: start; }
+.box .n { font-family: var(--display); font-size: 18px; color: var(--muted); padding-top: 6px; }
+.box textarea { min-height: 54px; }
+.box .opts { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-top: 6px; align-items: center; }
+.box .opts label { display: inline; margin: 0; text-transform: none; letter-spacing: 0; font-size: 12px; }
+pre { background: var(--code); color: var(--codefg); font: 13px/1.5 var(--mono); padding: 14px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; margin: 0; max-height: 60vh; overflow: auto; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.hint b { color: var(--ink); }
+.ok { color: var(--ok); font-size: 13px; margin-left: 8px; }
+#tpl { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; background: #777; display: block; margin-top: 10px; max-width: 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chips button { font-size: 12px; padding: 5px 9px; background: var(--line); color: var(--ink); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 10px; color: var(--ink); }
+.check label { display: inline; margin: 0; text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink); }
+hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+</style>
+
+<h1>Sprite Prompt <span>Forge</span></h1>
+<p class="sub">Builds ChatGPT sheet prompts and Seedance clip prompts the way we make them for Iron Beach Brawl: the transparent-background opener, the box-by-box poses, the back-view wording, the safety line at the end. It also draws the matching template.</p>
+
+<div class="wrap">
+  <div>
+    <div class="card">
+      <h2>1 · Character</h2>
+      <label for="preset">Load a cast member</label>
+      <div class="row"><select id="preset" style="flex:1"></select><button class="alt" id="loadPreset">Load</button></div>
+      <label for="cname">Name</label>
+      <input type="text" id="cname" placeholder="Scarlett">
+      <label for="cdesc">Appearance (what must stay the same in every box)</label>
+      <textarea id="cdesc" placeholder="an adult woman street brawler with long dark brown hair, pink long-sleeve crop top with white cuffs and red tie, pink leggings, barefoot, very muscular chibi build"></textarea>
+      <label for="cstyle">Style line</label>
+      <textarea id="cstyle"></textarea>
+      <div class="chips">
+        <button data-style="ibb">Iron Beach Brawl cast style</button>
+        <button data-style="pixel">Old pixel-art look (twin-tails)</button>
+        <button data-style="custom">Clear</button>
+      </div>
+      <div class="check"><input type="checkbox" id="adult" checked><label for="adult">State "adult woman" in the description (always on for this project)</label></div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <h2>2 · What to make</h2>
+      <div class="tabs" id="kinds">
+        <button data-k="sheet6" aria-pressed="true">6-box sheet</button>
+        <button data-k="sheet10">10-box sheet</button>
+        <button data-k="victim">Victim set</button>
+        <button data-k="guard">Guard set</button>
+        <button data-k="fix">Fix sheet</button>
+        <button data-k="design">New design</button>
+        <button data-k="seedance">Seedance clip</button>
+      </div>
+      <div id="sheetUI">
+        <div class="hint">Box 1 is always the stance from the template. Fill the rest; use the pose library to drop in named poses. Tick <b>back view</b> on any pose seen from behind and the safe wording is added for you.</div>
+        <div class="chips" id="poselib"></div>
+        <div id="boxes"></div>
+      </div>
+      <div id="seedUI" hidden>
+        <label for="motion">The motion (one move, start and end in the stance)</label>
+        <textarea id="motion" placeholder="throws a fast rising uppercut with her right fist, leaving the ground slightly at the top"></textarea>
+        <label for="angle">Camera angle</label>
+        <select id="angle"><option>side view, facing right</option><option>front three-quarter view</option><option>rear three-quarter view, turned away from the camera</option></select>
+        <div class="hint">Seedance rules baked in: flat green background, the stance as both start and end frame, locked-off camera wording, 4 seconds. Use Seedance 2.5 on Luno if Venice blocks it.</div>
+      </div>
+      <div id="designUI" hidden>
+        <label for="dnotes">Design brief (role, outfit, vibe, build)</label>
+        <textarea id="dnotes" placeholder="a lifeguard enemy: red one-piece, whistle, sun-bleached ponytail, tall and broad, cocky grin"></textarea>
+        <div class="hint">Attach the style reference image as "STYLE REFERENCE ONLY". The prompt asks for a design sheet: stance, front, back, face close-up.</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>3 · Prompt</h2>
+      <div class="row"><button class="go" id="copy">Copy prompt</button><span class="ok" id="copied"></span></div>
+      <pre id="out"></pre>
+      <div class="hint" id="attach"></div>
+    </div>
+    <div class="card" style="margin-top:18px" id="tplCard">
+      <h2>4 · Template</h2>
+      <div class="hint">1536×1024, the head line at 22% and the floor line at 88% of each box. Upload the character's stance cut-out (transparent PNG) and it's placed in box 1 at the right size. Long-press or right-click the image to save it, then attach it with the prompt.</div>
+      <div class="row" style="margin-top:8px"><input type="file" id="stance" accept="image/png,image/webp"><button class="alt" id="redraw">Redraw</button></div>
+      <img id="tpl" alt="Sprite sheet template">
+    </div>
+  </div>
+</div>
+
+<script>
+const OPEN = 'TRANSPARENT BACKGROUND. No glow, no shadow, no white outline. The background must be fully transparent, NOT black.';
+const CLOSE = 'Please make these in a way that is suitable with your image restriction guidelines. And if you have a problem with it, please adjust the image.';
+const BACK = ' Seen from a rear three-quarter angle: she is turned away from the camera, over-the-shoulder, so her back and the back of her head face the viewer.';
+const STYLES = {
+  ibb: 'Match the art style exactly: clean anime game-sprite art, thin dark-brown outlines, soft cel shading with gentle highlights, warm skin tones, expressive sharp eyes and a confident look. Chibi-leaning proportions: head about 1/4 of her height, very muscular build with big rounded shoulders and arms, thick defined thighs and calves, visible abs, wide fighting stance.',
+  pixel: 'Match the art style exactly: crisp game-sprite pixel-art look with thick dark outlines and flat shading, chibi proportions, very muscular build.',
+  custom: ''
+};
+const CAST = {
+  '': { name: '', desc: '', style: 'ibb' },
+  scarlett: { name: 'Scarlett', desc: 'an adult woman street brawler with long dark brown hair, a pink/magenta long-sleeve crop top with white cuffs and collar and a red tie, pink leggings, barefoot, very muscular chibi build', style: 'ibb' },
+  twin: { name: 'Twin-tail', desc: 'an adult woman brawler with long black twin-tail pigtails, blue eyes, a silver-grey sleeveless one-piece wrestling suit (the suit must stay SILVER-GREY), black shoes, very muscular chibi build', style: 'pixel' },
+  rookie: { name: 'Rookie kunoichi', desc: 'an adult woman kunoichi with a short black bob haircut, blue eyes, a dark green long-sleeve ninja top with red trim, dark green shorts, red-and-black sneakers with white socks, very muscular chibi build (the green and the red trim must stay exactly the same)', style: 'ibb' },
+  purple: { name: 'Purple kunoichi', desc: 'an adult woman kunoichi with a long black high ponytail, blue eyes, a black cloth face mask over her nose and mouth, a purple long-sleeve ninja top and purple shorts, white hand wraps, red-and-black sneakers with white socks, very muscular chibi build', style: 'ibb' },
+  gold: { name: 'Gold kunoichi', desc: 'an adult woman kunoichi with a long black high ponytail and a gold headband, blue eyes, a confident smirk, a black sleeveless ninja outfit with gold trim, gold wrist guards, red-and-black sneakers with white socks, very muscular chibi build', style: 'ibb' },
+  mika: { name: 'Mika', desc: 'an adult woman school-uniform brawler with short pink hair, a white sailor top with a red tie, a navy pleated skirt, white socks and black shoes, very muscular chibi build', style: 'ibb' },
+  nurse: { name: 'Nurse', desc: 'an adult woman nurse brawler with dark hair tied up, a white nurse dress with a red cross, white stockings and shoes, very muscular chibi build', style: 'ibb' },
+};
+const LIB = {
+  'Grabbed & struggling': 'GRABBED AND STRUGGLING. Standing, upper body pushed back, both hands gripping an invisible opponent\'s forearms in front of her chest, teeth gritted, one eye shut. Feet on the floor line.',
+  'Doubled over': 'DOUBLED OVER. Bent forward at the waist from a knee to the stomach, arms hanging down in front, mouth open gasping, eyes squeezed shut, knees bent. Feet on the floor line.',
+  'Lifted off her feet': 'LIFTED OFF HER FEET. Seen from the side, body tilted back about 45 degrees and off the ground, legs kicking, arms flailing, hair flying, shocked face. Centred in the box.',
+  'Upside down': 'UPSIDE DOWN. Her whole body vertical and inverted: head at the bottom of the box, feet pointing straight up, legs together, arms reaching down toward the floor, hair hanging down, eyes wide. Centred in the box.',
+  'Slammed flat': 'SLAMMED FLAT ON HER BACK. Lying horizontally on the floor line, face up, head to the LEFT and feet to the right, arms spread out, eyes dizzy swirls, hair fanned out on the floor.',
+  'Face-down': 'FACE-DOWN ON THE FLOOR. Lying horizontally on the floor line, face down, head to the LEFT, one arm under her, the other stretched out, legs straight.',
+  'High guard': 'HIGH GUARD. Both forearms raised in front of her face, fists by her temples, elbows tucked in to protect her ribs, chin down, knees bent, feet planted wide. Serious, focused expression.',
+  'Blocking a hit': 'BLOCKING A HIT. The same guard, rocked back slightly by an impact on her forearms: upper body leaning back a little, arms still up, back foot sliding, teeth gritted.',
+  'Guard broken': 'GUARD BROKEN. Her arms have been knocked apart and flung out wide to the sides, chest open, off balance and leaning backward, one foot lifting, eyes wide in shock, mouth open.',
+  'Torpedo dive': 'TORPEDO DIVE. Airborne, body horizontal and falling straight down, head and chest facing the floor, one arm bent with the point of the ELBOW aimed straight down and that fist by her own chest, other arm tucked, legs together trailing straight out behind. Centred in the box.',
+  'Bear hug lift': 'BEAR HUG LIFT. Standing with both arms wrapped around an invisible opponent\'s waist at chest height, lifting, back arched, feet planted wide, straining face.',
+  'Bridge suplex': 'BRIDGE SUPLEX. Lying on her upper back in a bridge, hips high, both hands still gripping an invisible opponent\'s waist above her, legs bent with feet flat on the floor line.',
+  'Rear jump kick': 'JUMP KICK SEEN FROM BEHIND. Airborne, back and the back of her head to the camera, one leg fully extended forward away from the viewer, the other tucked, arms out for balance. Centred in the box.',
+  'Jab': 'JAB. A quick straight punch with the lead fist, arm fully extended at shoulder height, shoulders turned into it, rear fist by the chin, feet on the floor line.',
+  'Uppercut': 'RISING UPPERCUT. The rear fist driving straight up past her own face, knees extending, heels lifting off the floor line, body stretched tall.',
+  'Roundhouse': 'ROUNDHOUSE KICK. Turning on the planted foot, the other leg swinging high and horizontal at head height, arms out for balance.',
+  'Knocked out': 'KNOCKED OUT. Lying on her side on the floor line, eyes closed, mouth open, one arm flung over her head.',
+  'Victory': 'VICTORY POSE. Standing tall, one fist raised, big confident grin, weight on one hip.',
+  'Taunt': 'TAUNT. Beckoning with one hand, the other on her hip, smug smirk, weight back on one leg.',
+};
+const SETS = {
+  victim: ['Grabbed & struggling', 'Doubled over', 'Lifted off her feet', 'Upside down', 'Slammed flat'],
+  guard: ['High guard', 'Blocking a hit', 'Guard broken', 'HIT FROM BEHIND WHILE GUARDING. Still in her guard, just struck in the back: back arched, chest pushed forward, head jerking back, eyes squeezed shut in pain, arms still half up.', ''],
+};
+let kind = 'sheet6', boxes = [];
+const $ = id => document.getElementById(id);
+const pre = $('preset'); for (const k in CAST) { const o = document.createElement('option'); o.value = k; o.textContent = k ? CAST[k].name : '— new character —'; pre.appendChild(o); }
+$('loadPreset').onclick = () => { const c = CAST[pre.value]; $('cname').value = c.name; $('cdesc').value = c.desc; $('cstyle').value = STYLES[c.style]; save(); build(); };
+document.querySelectorAll('[data-style]').forEach(b => b.onclick = () => { $('cstyle').value = STYLES[b.dataset.style]; build(); });
+$('cstyle').value = STYLES.ibb;
+const lib = $('poselib'); for (const n in LIB) { const b = document.createElement('button'); b.textContent = n; b.onclick = () => { const i = boxes.findIndex(x => !x.text.trim()); const at = i < 0 ? boxes.length - 1 : i; boxes[at].text = LIB[n]; if (/FROM BEHIND|BEHIND\b/.test(LIB[n])) boxes[at].back = true; renderBoxes(); build(); }; lib.appendChild(b); }
+function nBoxes() { return kind === 'sheet10' ? 10 : kind === 'fix' ? 6 : 6; }
+function setKind(k) {
+  kind = k; document.querySelectorAll('#kinds button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
+  $('sheetUI').hidden = k === 'seedance' || k === 'design'; $('seedUI').hidden = k !== 'seedance'; $('designUI').hidden = k !== 'design'; $('tplCard').hidden = k === 'seedance' || k === 'design';
+  const n = nBoxes(); boxes = Array.from({ length: n - 1 }, (_, i) => boxes[i] || { text: '', back: false });
+  if (SETS[k]) boxes = SETS[k].map(t => ({ text: LIB[t] || t, back: false }));
+  renderBoxes(); build(); drawTpl();
+}
+document.querySelectorAll('#kinds button').forEach(b => b.onclick = () => setKind(b.dataset.k));
+function renderBoxes() {
+  const host = $('boxes'); host.innerHTML = '';
+  boxes.forEach((bx, i) => {
+    const d = document.createElement('div'); d.className = 'box';
+    d.innerHTML = `<div class="n">${i + 2}</div><div><textarea id="bx${i}" placeholder="Pose name in CAPS, then the description…">${bx.text}</textarea><div class="opts"><input type="checkbox" id="bk${i}" ${bx.back ? 'checked' : ''}><label for="bk${i}">back view</label><input type="checkbox" id="air${i}" ${bx.air ? 'checked' : ''}><label for="air${i}">airborne (centred, not on the floor line)</label></div></div>`;
+    host.appendChild(d);
+    d.querySelector('textarea').oninput = e => { bx.text = e.target.value; build(); };
+    d.querySelector('#bk' + i).onchange = e => { bx.back = e.target.checked; build(); };
+    d.querySelector('#air' + i).onchange = e => { bx.air = e.target.checked; build(); };
+  });
+}
+function desc() { let d = $('cdesc').value.trim() || '[describe the character]'; if ($('adult').checked && !/adult/i.test(d)) d = 'an adult woman, ' + d.replace(/^(an?\s+)/i, ''); return d; }
+function build() {
+  const name = $('cname').value.trim() || 'the character', style = $('cstyle').value.trim(), n = nBoxes();
+  let p = '', attach = '';
+  if (kind === 'seedance') {
+    p = `Locked-off camera on a tripod: no zoom, no pan, no tracking, the camera never moves. 2D game sprite animation on a flat, solid, bright green background that fills the whole frame. ${desc()}, ${$('angle').value}. She starts standing in her fighting stance exactly as in the start frame, ${$('motion').value.trim() || '[the motion]'}, and returns to exactly the same stance by the end. The character stays the same size and in the same place in the frame throughout. Clean, readable key poses. No other characters, no text, no particle effects, no camera movement. 4 seconds.`;
+    attach = '<b>Attach:</b> the green padded start frame of her stance, as BOTH the start and the end frame. If a service blocks it, try Seedance 2.5 on Luno, or use the filter-safe angle reference.';
+  } else if (kind === 'design') {
+    p = `${OPEN}\n\nCharacter design sheet for a 2D beat-em-up: ${desc()}. ${$('dnotes').value.trim()}\n\n${style}\n\nShow her four times on one sheet, all the same size, feet on one shared floor line: (1) her fighting stance facing right, (2) a full front view standing relaxed, (3) a full back view (rear three-quarter angle, turned away from the camera, over-the-shoulder), (4) a face close-up with her expression. No text, no labels, no background.\n\n${CLOSE}`;
+    attach = '<b>Attach:</b> the project style reference image, labelled "STYLE REFERENCE ONLY: match the art style, not the character".';
+  } else {
+    const intro = kind === 'victim' ? '\n\nThese are "being grabbed" reaction poses for a beat-em-up. There is NO other character in any box - draw only her, reacting as if an invisible opponent is holding or throwing her.' : kind === 'fix' ? '\n\nThis is a fix sheet: each box replaces a frame that came out wrong before, so follow each description exactly.' : '';
+    const lines = boxes.map((b, i) => { let t = b.text.trim(); if (!t) return null; if (b.back && !/rear three-quarter/i.test(t)) t += BACK; if (b.air && !/centred in the box/i.test(t)) t += ' Centred in the box, not on the floor line.'; return `Box ${i + 2}: ${t}`; }).filter(Boolean);
+    p = `${OPEN}\n\nFill in this ${n}-box sprite sheet template for the same character shown in box 1: ${desc()}. Keep her EXACTLY as she looks in box 1: ${style ? style + ' ' : ''}Same face, same hair, same outfit colours, same proportions and same size. She faces RIGHT in every box unless a box says otherwise. One pose per box, nothing crossing into another box. Standing poses have their feet on the floor line of their box and the top of the head on the dashed head line. Remove the box numbers, dashed lines and floor lines from the final image.${intro}\n\nBox 1: keep as is (her fighting stance).\n${lines.join('\n')}\n\n${CLOSE}`;
+    attach = `<b>Attach:</b> the ${n}-box template below with ${name}'s stance in box 1. After a refusal, start a fresh chat.`;
+  }
+  $('out').textContent = p; $('attach').innerHTML = attach; save();
+}
+$('copy').onclick = async () => { const t = $('out').textContent; try { await navigator.clipboard.writeText(t); $('copied').textContent = 'Copied'; } catch (e) { const r = document.createRange(); r.selectNodeContents($('out')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copied').textContent = 'Select and copy'; } setTimeout(() => $('copied').textContent = '', 2000); };
+['cname', 'cdesc', 'cstyle', 'motion', 'angle', 'dnotes', 'adult'].forEach(id => $(id).addEventListener('input', build));
+// ---- template drawing (same geometry as tools/mktpl.py)
+let stanceImg = null;
+$('stance').onchange = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => { stanceImg = img; drawTpl(); }; img.src = URL.createObjectURL(f); };
+$('redraw').onclick = drawTpl;
+function drawTpl() {
+  const n = nBoxes(), cols = n === 10 ? 5 : 3, rows = 2, W = 1536, H = 1024, bw = W / cols, bh = H / rows;
+  const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d');
+  x.clearRect(0, 0, W, H);
+  const dash = (x0, y0, x1, y1, col, w, d) => { x.save(); x.strokeStyle = col; x.lineWidth = w; x.setLineDash(d); x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke(); x.restore(); };
+  for (let r = 0; r < rows; r++) {
+    const gy = r * bh + Math.round(bh * .22), fy = r * bh + Math.round(bh * .88);
+    dash(0, gy, W, gy, 'rgba(40,30,10,1)', 7, [22, 14]); dash(0, gy, W, gy, 'rgb(255,220,40)', 3, [22, 14]);
+    x.save(); x.strokeStyle = 'rgb(40,40,40)'; x.lineWidth = 2; for (const yy of [fy, fy + 6]) { x.beginPath(); x.moveTo(0, yy); x.lineTo(W, yy); x.stroke(); } x.restore();
+  }
+  for (let k = 1; k < cols; k++) { dash(k * bw, 0, k * bw, H, 'rgb(60,60,60)', 5, [22, 14]); dash(k * bw, 0, k * bw, H, 'rgb(230,230,230)', 1, [22, 14]); }
+  for (let r = 1; r < rows; r++) { dash(0, r * bh, W, r * bh, 'rgb(60,60,60)', 5, [22, 14]); dash(0, r * bh, W, r * bh, 'rgb(230,230,230)', 1, [22, 14]); }
+  x.font = '700 30px "IBM Plex Sans", sans-serif'; x.lineWidth = 4; x.strokeStyle = 'rgb(20,20,20)'; x.fillStyle = '#fff';
+  for (let i = 0; i < n; i++) { const px = (i % cols) * bw + 12, py = Math.floor(i / cols) * bh + 34; x.strokeText(String(i + 1), px, py); x.fillText(String(i + 1), px, py); }
+  if (stanceImg) {
+    // trim transparent edges, then scale so the head sits on the head line and the feet on the floor line of box 1
+    const t = document.createElement('canvas'); t.width = stanceImg.width; t.height = stanceImg.height; const tx = t.getContext('2d'); tx.drawImage(stanceImg, 0, 0);
+    const d = tx.getImageData(0, 0, t.width, t.height).data; let minX = t.width, maxX = -1, minY = t.height, maxY = -1;
+    for (let yy = 0; yy < t.height; yy++) for (let xx = 0; xx < t.width; xx++) if (d[(yy * t.width + xx) * 4 + 3] > 40) { if (xx < minX) minX = xx; if (xx > maxX) maxX = xx; if (yy < minY) minY = yy; if (yy > maxY) maxY = yy; }
+    if (maxX > minX) {
+      const gy = Math.round(bh * .22), fy = Math.round(bh * .88), sw = maxX - minX + 1, sh = maxY - minY + 1, k = (fy - gy) / sh, dw = sw * k, dh = sh * k;
+      x.drawImage(t, minX, minY, sw, sh, bw / 2 - dw / 2, fy - dh, dw, dh);
+    }
+  }
+  $('tpl').src = c.toDataURL('image/png');
+}
+function save() { try { localStorage.setItem('forge', JSON.stringify({ name: $('cname').value, desc: $('cdesc').value, style: $('cstyle').value, kind, boxes, motion: $('motion').value, dnotes: $('dnotes').value })); } catch (e) {} }
+(function load() { try { const s = JSON.parse(localStorage.getItem('forge') || 'null'); if (s) { $('cname').value = s.name || ''; $('cdesc').value = s.desc || ''; $('cstyle').value = s.style || STYLES.ibb; $('motion').value = s.motion || ''; $('dnotes').value = s.dnotes || ''; boxes = s.boxes || []; setKind(s.kind || 'sheet6'); return; } } catch (e) {} $('loadPreset').click(); pre.value = 'scarlett'; $('loadPreset').click(); setKind('sheet6'); })();
+</script>
