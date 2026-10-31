@@ -90,6 +90,7 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
         <button data-k="guard">Guard set</button>
         <button data-k="fix">Fix sheet</button>
         <button data-k="design">New design</button>
+        <button data-k="restyle">Restyle a design</button>
         <button data-k="seedance">Seedance clip</button>
       </div>
       <div id="sheetUI">
@@ -103,6 +104,11 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
         <label for="angle">Camera angle</label>
         <select id="angle"><option>side view, facing right</option><option>front three-quarter view</option><option>rear three-quarter view, turned away from the camera</option></select>
         <div class="hint">Rules baked in: flat green background, the stance as the start (and end) frame, locked-off camera wording, 4 seconds. The note under the prompt changes with the video tool you picked.</div>
+      </div>
+      <div id="restyleUI" hidden>
+        <div class="hint">For a character drawn elsewhere (Midjourney, a sketch, another game's style). Attach TWO images: her design as the character reference, and the project's style reference. The prompt asks for the same character redrawn in the project style as a design sheet, which then becomes box 1 of every pose sheet.</div>
+        <label for="rkeep">What must survive the restyle</label>
+        <textarea id="rkeep" placeholder="pink high ponytail, grey eyes, gold hoop earrings, purple sleeveless bodysuit, white sneakers with socks, cocky grin, tan skin"></textarea>
       </div>
       <div id="designUI" hidden>
         <label for="dnotes">Design brief (role, outfit, vibe, build)</label>
@@ -194,7 +200,7 @@ const lib = $('poselib'); for (const n in LIB) { const b = document.createElemen
 function nBoxes() { return kind === 'sheet10' ? 10 : kind === 'fix' ? 6 : 6; }
 function setKind(k) {
   kind = k; document.querySelectorAll('#kinds button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
-  $('sheetUI').hidden = k === 'seedance' || k === 'design'; $('seedUI').hidden = k !== 'seedance'; $('designUI').hidden = k !== 'design'; $('tplCard').hidden = k === 'seedance' || k === 'design';
+  $('sheetUI').hidden = k === 'seedance' || k === 'design' || k === 'restyle'; $('seedUI').hidden = k !== 'seedance'; $('designUI').hidden = k !== 'design'; $('restyleUI').hidden = k !== 'restyle'; $('tplCard').hidden = k === 'seedance' || k === 'design' || k === 'restyle';
   const n = nBoxes(); boxes = Array.from({ length: n - 1 }, (_, i) => boxes[i] || { text: '', back: false });
   if (SETS[k]) boxes = SETS[k].map(t => ({ text: LIB[t] || t, back: false }));
   renderBoxes(); build(); drawTpl();
@@ -266,6 +272,9 @@ function build() {
   if (kind === 'seedance') {
     p = `Locked-off camera on a tripod: no zoom, no pan, no tracking, the camera never moves. 2D game sprite animation on a flat, solid, bright green background that fills the whole frame. ${desc()}, ${$('angle').value}. She starts standing in her fighting stance exactly as in the start frame, ${$('motion').value.trim() || '[the motion]'}, and returns to exactly the same stance by the end. The character stays the same size and in the same place in the frame throughout. Clean, readable key poses. No other characters, no text, no particle effects, no camera movement. 4 seconds.`;
     attach = '<b>Attach:</b> the green padded start frame of her stance, as BOTH the start and the end frame. If a service blocks it, try Seedance 2.5 on Luno, or use the filter-safe angle reference.';
+  } else if (kind === 'restyle') {
+    p = `${OPEN}\n\nI am attaching two images. IMAGE 1 is a CHARACTER REFERENCE: ${desc()}. IMAGE 2 is a STYLE REFERENCE ONLY: match its art style exactly and ignore the characters in it.\n\nRedraw the character from image 1 in the art style of image 2: ${style}\n\nKeep everything that identifies her: ${$('rkeep').value.trim() || '[list what must survive]'}. Change only the rendering style and proportions to match image 2.\n\nMake a character design sheet: show her four times on one sheet, all the same size, feet on one shared floor line: (1) her fighting stance facing right, (2) a full front view standing relaxed, (3) a full back view (rear three-quarter angle, turned away from the camera, over-the-shoulder), (4) a face close-up with her expression. No text, no labels, no background.\n\n${CLOSE}`;
+    attach = '<b>Attach:</b> image 1 = her design (any style), image 2 = the project style reference. When it comes back, upload that sheet to the template below and pick the stance figure.';
   } else if (kind === 'design') {
     p = `${OPEN}\n\nCharacter design sheet for a 2D beat-em-up: ${desc()}. ${$('dnotes').value.trim()}\n\n${style}\n\nShow her four times on one sheet, all the same size, feet on one shared floor line: (1) her fighting stance facing right, (2) a full front view standing relaxed, (3) a full back view (rear three-quarter angle, turned away from the camera, over-the-shoulder), (4) a face close-up with her expression. No text, no labels, no background.\n\n${CLOSE}`;
     attach = '<b>Attach:</b> the project style reference image, labelled "STYLE REFERENCE ONLY: match the art style, not the character".';
@@ -288,7 +297,7 @@ function build() {
   $('out').textContent = p; $('attach').innerHTML = attach; save();
 }
 $('copy').onclick = async () => { const t = $('out').textContent; try { await navigator.clipboard.writeText(t); $('copied').textContent = 'Copied'; } catch (e) { const r = document.createRange(); r.selectNodeContents($('out')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('copied').textContent = 'Select and copy'; } setTimeout(() => $('copied').textContent = '', 2000); };
-['cname', 'cdesc', 'cstyle', 'motion', 'angle', 'dnotes', 'adult', 'imgTool', 'vidTool'].forEach(id => $(id).addEventListener('input', build));
+['cname', 'cdesc', 'cstyle', 'motion', 'angle', 'dnotes', 'adult', 'imgTool', 'vidTool', 'rkeep'].forEach(id => $(id).addEventListener('input', build));
 // ---- template drawing (same geometry as tools/mktpl.py)
 let stanceImg = null;
 $('stance').onchange = e => { const f = e.target.files[0]; if (!f) return; const img = new Image(); img.onload = () => prepStance(img); img.src = URL.createObjectURL(f); };
