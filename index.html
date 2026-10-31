@@ -529,7 +529,7 @@ function damage(t, hit, att) {
   game.hitstop = hit.stop != null ? hit.stop : hit.big ? .09 : .05; game.shake = Math.max(game.shake, hit.big ? 9 : 4);
   audio.hit(hit.big);
   const hx = (att.x + t.x) / 2 + att.face * 14, hy = t.y - (hit.low ? 70 : 92);
-  game.fx.push({ k: 'spark', x: hx, y: hy, t: 0, life: .22, big: hit.big });
+  game.fx.push({ k: 'spark', x: hx, y: hy, t: 0, life: hit.big ? .34 : .26, big: hit.big });
   game.fx.push({ k: 'num', x: t.x, y: t.y - 150, t: 0, life: .7, txt: hit.dmg, foe: t === hero });
   if (t === hero) game.comboCount = 0;
   else { game.comboCount++; game.comboTimer = 1.4; game.score += hit.dmg * 10 * Math.max(1, Math.min(game.comboCount, 6)); }
@@ -1934,10 +1934,18 @@ function drawFX(fx) {
     ctx.beginPath(); ctx.arc(sx, fx.y, 14 + p * 26, 0, 7); ctx.stroke(); return;
   }
   if (fx.k === 'spark') {
-    ctx.save(); ctx.translate(sx, fx.y); const r = (fx.big ? 34 : 22) * (.6 + p);
-    ctx.fillStyle = `rgba(255,228,120,${1 - p})`; ctx.beginPath();
-    for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, rr = i % 2 ? r * .4 : r; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
-    ctx.fill(); ctx.fillStyle = `rgba(255,255,255,${1 - p})`; ctx.beginPath(); ctx.arc(0, 0, r * .3, 0, 7); ctx.fill(); ctx.restore();
+    // SOR4-style impact burst: a white flash, then a jagged comic burst that pops past full size, settles and fades
+    if (fx.rot == null) { fx.rot = Math.random() * Math.PI; fx.jag = Array.from({ length: 12 }, () => .75 + Math.random() * .5); }
+    ctx.save(); ctx.translate(sx, fx.y); ctx.rotate(fx.rot);
+    const R = fx.big ? 40 : 26, grow = p < .3 ? .5 + (p / .3) * .75 : 1.25 - (p - .3) * .35, a = p < .45 ? 1 : 1 - (p - .45) / .55, r = R * grow;
+    ctx.fillStyle = `rgba(255,170,40,${a * .9})`; ctx.beginPath();
+    for (let i = 0; i < 24; i++) { const an = i / 24 * Math.PI * 2, rr = i % 2 ? r * .42 : r * 1.12 * fx.jag[(i >> 1) % 12]; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = `rgba(255,232,120,${a})`; ctx.beginPath();
+    for (let i = 0; i < 24; i++) { const an = i / 24 * Math.PI * 2 + .13, rr = i % 2 ? r * .32 : r * .82 * fx.jag[(i >> 1) % 12]; ctx.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = `rgba(255,255,255,${p < .25 ? 1 : a * .8})`; ctx.beginPath(); ctx.arc(0, 0, r * (p < .2 ? .55 : .3), 0, 7); ctx.fill();
+    ctx.restore();
   } else {
     const big = fx.k === 'tag';
     ctx.font = (big ? '22px' : '20px') + ' Bungee, Impact, sans-serif'; ctx.textAlign = 'center';
@@ -10519,7 +10527,7 @@ function slTaps(h) {
 const slToward = h => h.face > 0 ? keys.R : keys.L;
 const slAway = h => h.face > 0 ? keys.L : keys.R;
 const slTag = (txt, x, y, life) => game.fx.push({ k: 'tag', x, y, t: 0, life: life || .8, txt });
-function slSet(h, s) { setState(h, s); h.slca = null; h.slcfi = 0; h.hitDone = false; h.slDone = false; }
+function slSet(h, s) { setState(h, s); h.tilt = 0; if (s !== 'slrun') { h.sqx = 0; h.sqy = 0; } h.slca = null; h.slcfi = 0; h.hitDone = false; h.slDone = false; }
 function slF(h, row, i) { h.slca = row; h.slcfi = i || 0; }
 
 // ---------- special meter and the green (recoverable) health ----------
@@ -10616,6 +10624,9 @@ function slStepUpd(h, dt) {
   }
   h.sT += dt * 1000;
   if (s.stomp && !h.hitDone && h.sT > s.ms * .7) { h.hitDone = true; slOtg(h, 11, 'STOMP!', 90); }
+  // ease back into guard after a strike (instead of snapping): a small lean back and settle over the first ~90ms
+  if (h.sid === 'rec' || h.sid === 'rec2') { const k = Math.max(0, 1 - h.sT / 90); h.tilt = -.07 * k * k; h.sqx = 1 + .025 * k; h.sqy = 1 - .025 * k; }
+  else { h.tilt = 0; h.sqx = 0; h.sqy = 0; }
   if (h.sT < s.ms) { h.vx *= .82; return; }
   h.sT = 0;
   const nx = s.nx && h.slq && s.nx[h.slq];
