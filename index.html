@@ -16102,7 +16102,8 @@ if (typeof slDowned === 'function') {
 }
 /* ---------- FEEL: combo feedback, super flash, afterimages, enemy telegraphs, crowd pacing ----------
    Tunables in FEEL (Sandbox > FEEL tab edits the multipliers; these are the base values). */
-const FEEL = { maxAtk: 2, telegraph: .16, ghostEvery: .04, ghostLife: .22 };
+const FEEL = { maxAtk: 2, telegraph: 0,   // telegraph flash off for now (set .16 to bring it back)
+  telegraphOff: true, ghostEvery: .04, ghostLife: .22 };
 // ---- combo: damage tally, colour tiers, end-of-combo rating with damage and score
 const COMBO = { dmg: 0, score0: 0, peak: 0, endT: -9, end: null, popT: 0 };
 const COMBO_TIERS = [[0, '#ffffff'], [5, '#ffd36b'], [10, '#ff9a3c'], [18, '#7cf0b0'], [30, '#7fd6ff']];
@@ -16178,7 +16179,7 @@ const feelAtk = e => !e.cls ? TWIN_ATK.has(e.state) : typeof npcAttacking === 'f
     const was = e.__atk;
     _ue(e, dt);
     const now = e.state !== 'ko' && !(e.delay > 0) && feelAtk(e) && !['pheld', 'ptoss', 'jug', 'hurt', 'down', 'held', 'dizzy', 'nguard', 'ncrush', 'taunt', 'flex', 'gloat', 'powerup', 'victory'].includes(e.state);
-    if (now && !was && !game.watch) e.teleT = FEEL.telegraph;
+    if (now && !was && !game.watch && FEEL.telegraph > 0) e.teleT = FEEL.telegraph;
     e.__atk = now;
     if (e.teleT > 0) e.teleT -= dt;
   };
