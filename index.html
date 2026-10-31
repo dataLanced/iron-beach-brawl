@@ -16117,6 +16117,7 @@ function sbxAI(dt) {
   updateEnemy = function (e, dt) {
     if (game.sandbox && SBX.aiOff && ['idle', 'walk', 'step', 'backwalk'].includes(e.state) && !(e.delay > 0)) {
       e.vx = 0; e.vy = 0; e.st += dt; e.ft2 = (e.ft2 || 0) + dt * 1000; e.anim = 'idle';
+      if (e.inv > 0) e.inv = e.inv > 50 ? 0 : e.inv - dt;   // their own update counts down get-up invincibility; frozen, we do it
       if (e.frames && e.frames.idle) { e.ca = 'idle'; e.cfi = Math.floor(e.ft2 / 160) % e.frames.idle.length; }
       if (e.state !== 'idle') setState(e, 'idle');
       return;
