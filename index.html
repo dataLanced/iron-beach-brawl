@@ -11084,6 +11084,7 @@ function slHeld(e, dt) {
     const hx = h.x + h.face * fr.gx * h.scale, hz = (h.z || 0) + fr.gy * h.scale + (V.lift || 0);
     const p = slVicSpot(e, at);
     e.x = hx - p.x + (tu.ox || 0) * h.face; e.z = Math.max(0, hz - p.y + (tu.oz || 0));
+    if ((e.slPose === 'hold' || e.slPose === 'bent') && !V.lift && !(h.z > 0)) e.z = 0;   // standing holds keep her feet on the floor (only lifts raise her)
   } else { e.x = h.x + h.face * 60; e.z = 0; }
 }
 // which of the victim's own frames shows a pose (null = none drawn: falls back to her normal frame)
