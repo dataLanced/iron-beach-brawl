@@ -58,6 +58,17 @@ The method below is style-independent; only the style reference and style line c
   a different move. Content filters differ by host: Seedance 2.5 on Luno passed clips Venice blocked.
 - Key the green, then pick 3-7 frames per move.
 
+### AutoSprite (cycles from one approved image; tested on Shinette)
+- Feed it OUR cleaned art (transparent, no halo), never a raw design sheet. Fill its four Reference Views
+  (front / back / left / right) from a ChatGPT turnaround; the left view is the profile mirrored.
+- Loops (idle, walk, run): Turbo, 2 s, Animate from "First frame", Pro First Frame ON (~8 credits). Clean seams.
+- Expressive one-shots: Ultra, 2-3 s, Animate from "Reference image", Pro First Frame ON. Ultra can't force the last
+  frame, so loops from it need a loop point found inside the clip.
+- Sheet: 25 frames, 512 px, Sharpen None (the packer sharpens), Compression OFF. Describe the motion with Add Custom;
+  never "Enhance" a loop. Keep descriptions focused: stacking instructions makes it drift elsewhere (face, chest).
+- Generating fresh beats Edit (Edit on Ultra costs 100). "Pick the frames yourself" can in-between our own key poses.
+- It can't do grabs or anything touching another fighter: those stay ChatGPT sheets.
+
 ### Cutting and packing
 - Cut by watershed per grid cell (seed from eroded figure pixels, never let a seed span two cells, reassign stray
   bits to the figure they touch). Clean template guide lines only OUTSIDE the body.
