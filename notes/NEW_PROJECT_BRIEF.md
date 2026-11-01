@@ -147,3 +147,23 @@ layers deep). It works but every feature is a patch. Instead:
 - Stage always true 16:9. Portrait: controls under the screen, sized by vw. Landscape: stage full height, controls
   semi-transparent over the lower corners, safe-area insets. Buttons: d-pad, Jump, Kick, Punch, S (special),
   G (guard, hold), Title.
+
+## 7. Next project: military brawler / shooter hybrid (direction as of Nov 2026)
+Same side-on 2.5D belt-scroller view (lanes, up/down movement), military setting, guns with real depth AND hand-to-hand
+just as deep. References: Shank (melee flowing into guns), Huntdown (2D gun feel), Metal Slug (military spectacle),
+Streets of Rage (movement, physicality).
+Leaning towards (not final):
+- Guns and melee as one system: buttons depend on distance (shoot at range; the same press point-blank = pistol-whip /
+  muzzle jab). Never auto-switch into melee - the choice is the skill.
+- Aiming that respects lanes: lane-locked, hold-to-aim plants her and sweeps a laser across nearby lanes; three aim
+  heights (high = jumpers / ledges, level, low = downed foes); soft lock-on with a flick to cycle. Phone-friendly.
+  Free-reticle aiming is ambiguous in 2.5D (a point on screen doesn't say which lane).
+- Disarms as the reward for closing in (strip a rifle, turn a gunner's arm on his squad); gun-fu in combos (point-blank
+  shots mid-string, shooting juggled / downed foes, human-shield grabs).
+- Resource tension: sidearm always on her, one primary slot, limited ammo, timed reload that melee can cancel.
+- Enemies: cover, suppressing fire that pins a lane, lane flanking, aim telegraphed by laser / muzzle glint; knife and
+  brawler types mixed in so the player keeps switching.
+- ART: draw the gun arm + gun as a separate rotating layer from the very first sheet (aim angles x stances x weapons
+  would otherwise multiply frames). The grab system's front-arm layer is the same idea.
+Open questions to settle first: art style; start armed or pick guns up; the cast (playable soldiers / mercs, adults);
+phone aim scheme. Then write the design doc (combat loop, weapon classes, enemy types, controls).
