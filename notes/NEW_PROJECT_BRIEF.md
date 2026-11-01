@@ -148,22 +148,15 @@ layers deep). It works but every feature is a patch. Instead:
   semi-transparent over the lower corners, safe-area insets. Buttons: d-pad, Jump, Kick, Punch, S (special),
   G (guard, hold), Title.
 
-## 7. Next project: military brawler / shooter hybrid (direction as of Nov 2026)
-Same side-on 2.5D belt-scroller view (lanes, up/down movement), military setting, guns with real depth AND hand-to-hand
-just as deep. References: Shank (melee flowing into guns), Huntdown (2D gun feel), Metal Slug (military spectacle),
-Streets of Rage (movement, physicality).
-Leaning towards (not final):
-- Guns and melee as one system: buttons depend on distance (shoot at range; the same press point-blank = pistol-whip /
-  muzzle jab). Never auto-switch into melee - the choice is the skill.
-- Aiming that respects lanes: lane-locked, hold-to-aim plants her and sweeps a laser across nearby lanes; three aim
-  heights (high = jumpers / ledges, level, low = downed foes); soft lock-on with a flick to cycle. Phone-friendly.
-  Free-reticle aiming is ambiguous in 2.5D (a point on screen doesn't say which lane).
-- Disarms as the reward for closing in (strip a rifle, turn a gunner's arm on his squad); gun-fu in combos (point-blank
-  shots mid-string, shooting juggled / downed foes, human-shield grabs).
-- Resource tension: sidearm always on her, one primary slot, limited ammo, timed reload that melee can cancel.
-- Enemies: cover, suppressing fire that pins a lane, lane flanking, aim telegraphed by laser / muzzle glint; knife and
-  brawler types mixed in so the player keeps switching.
-- ART: draw the gun arm + gun as a separate rotating layer from the very first sheet (aim angles x stances x weapons
-  would otherwise multiply frames). The grab system's front-arm layer is the same idea.
-Open questions to settle first: art style; start armed or pick guns up; the cast (playable soldiers / mercs, adults);
-phone aim scheme. Then write the design doc (combat loop, weapon classes, enemy types, controls).
+## 7. Next project: military-setting brawler (direction as of Nov 2026)
+Same side-on 2.5D belt-scroller view (lanes, up/down movement), military setting. THE STAR IS HAND-TO-HAND: strings,
+grabs, throws, counters, takedowns. Guns exist but are weapon PICKUPS, not the focus - and pickups are new to us (never
+built in a project yet), so this is where we experiment.
+Pickups to try (SOR / Final Fight style, then push a little):
+- Weapons on the floor or dropped by enemies: walk over + attack to pick up, throw to discard (thrown weapons hit).
+- Melee weapons (knife, baton, rifle butt) with limited durability; guns with limited ammo, then thrown or used as clubs.
+- Guns kept simple and readable: fire along her lane (maybe a small up/down lane tolerance), no free aiming.
+- Disarms as a hand-to-hand reward: grab or counter a gunner to strip his weapon.
+- Enemies pick weapons up too, and telegraph a raised gun (laser / muzzle glint) so the player can close in or dodge.
+- One shared weapon system (pickup, hold, use, durability / ammo, drop, throw) used by players AND enemies.
+Open questions: art style; the cast (adults); which weapons; can the player carry a weapon between areas.
