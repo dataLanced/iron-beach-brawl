@@ -15725,7 +15725,10 @@ function updateShinette(e, dt) {
   if (S === 'shgrab') { shGrabUpd(e, dt); return; }
   if (S === 'shguard') { e.ca = 'guard'; e.cfi = 0; e.vx *= Math.pow(.02, dt); e.vy = 0; if (e.st > .75) { shSet(e, 'idle'); e.cd = Math.min(e.cd, .3); } return; }
   if (S === 'shtaunt') { e.vx = 0; e.vy = 0; e.ca = 'taunt'; e.cfi = e.tset + (e.st > .45 ? 1 : 0); if (e.st > 1.1) shSet(e, 'idle'); return; }
-  if (S === 'shwin') { e.vx = 0; e.vy = 0; const W_ = e.winSet; let i = Math.min(W_.length - 1, Math.floor(e.st / .55)); e.ca = 'win'; e.cfi = W_[i]; return; }
+  if (S === 'shwin') {   // her victory routine; 'posing' holds the respawn back (as every other enemy's victory does)
+    if (hero.state !== 'ko') { e.posing = false; shSet(e, 'idle'); e.cd = 1; return; }
+    e.vx = 0; e.vy = 0; e.posing = true; const W_ = e.winSet; e.ca = 'win'; e.cfi = W_[Math.min(W_.length - 1, Math.floor(e.st / .6))]; return;
+  }
   if (S === 'shfidget') { e.vx = 0; e.vy = 0; e.ca = 'fidget'; e.cfi = Math.floor(e.st / .07) % e.frames.fidget.length; if (e.st > 1.6 || Math.abs(hero.x - e.x) < 200) shSet(e, 'idle'); return; }
 
   // ---------- deciding ----------
@@ -15734,7 +15737,7 @@ function updateShinette(e, dt) {
   const behind = hero.face === Math.sign(hero.x - e.x) && adx < 95;   // the player has her back to her
   e.face = Math.sign(dx) || e.face;
   if (hero.state === 'ko') {   // she won: a victory routine
-    if (npcKOer(e) || !game.enemies.some(o => o !== e && npcKOer(o))) { shSet(e, 'shwin'); e.winSet = [[0, 1], [2, 3, 4], [5, 6], [7, 8, 9]][Math.floor(Math.random() * 4)]; e.face = 1; return; }
+    if (npcKOer(e) || !game.enemies.some(o => o !== e && npcKOer(o))) { shSet(e, 'shwin'); shTag(['TEE-HEE!', 'TOO EASY~', 'HMPH!', '...HEHEHE.'][e.winPick = Math.floor(Math.random() * 4)], e.x, e.y - 205, 1.4); e.winSet = [[0, 1], [2, 3, 4], [5, 6], [7, 8, 9]][e.winPick]; e.face = 1; return; }
   }
   e.cd -= dt; e.gcd -= dt; e.aacd -= dt; e.tcd -= dt; e.fcd -= dt;
   const busy = hero.state === 'held' || hero.state === 'down' || hero.state === 'ko';
