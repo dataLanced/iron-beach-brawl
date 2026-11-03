@@ -58,16 +58,28 @@ The method below is style-independent; only the style reference and style line c
   a different move. Content filters differ by host: Seedance 2.5 on Luno passed clips Venice blocked.
 - Key the green, then pick 3-7 frames per move.
 
-### AutoSprite (cycles from one approved image; tested on Shinette)
-- Feed it OUR cleaned art (transparent, no halo), never a raw design sheet. Fill its four Reference Views
-  (front / back / left / right) from a ChatGPT turnaround; the left view is the profile mirrored.
-- Loops (idle, walk, run): Turbo, 2 s, Animate from "First frame", Pro First Frame ON (~8 credits). Clean seams.
-- Expressive one-shots: Ultra, 2-3 s, Animate from "Reference image", Pro First Frame ON. Ultra can't force the last
-  frame, so loops from it need a loop point found inside the clip.
-- Sheet: 25 frames, 512 px, Sharpen None (the packer sharpens), Compression OFF. Describe the motion with Add Custom;
-  never "Enhance" a loop. Keep descriptions focused: stacking instructions makes it drift elsewhere (face, chest).
-- Generating fresh beats Edit (Edit on Ultra costs 100). "Pick the frames yourself" can in-between our own key poses.
-- It can't do grabs or anything touching another fighter: those stay ChatGPT sheets.
+### AutoSprite (tested on Shinette; good for cycles and whole moves, NOT grabs)
+- What it EXPORTS: one PNG sprite sheet, a square grid (5x5 for 25 frames), every cell the same size, already
+  transparent, every frame at the same zoom with the feet on the same line. Cut it with notes/tools/autosprite_cut.py
+  (also prints the best loop points). Normalise it by the idle's stance height like any other sheet.
+- Inputs: OUR cleaned art (transparent, no halo), never a raw design sheet. Fill its four Reference Views (front / back /
+  left / right) from a ChatGPT turnaround; left = the profile mirrored. Base image at the three-quarter angle.
+- In every description, spell the outfit out and say it never changes ("same one-piece dress covering her stomach, no
+  crop top"): that stopped costume drift when nothing else did. Keep descriptions focused; never press "Enhance" on a loop.
+- Loops (idle, walk, run): Turbo, 2 s, Animate from "First frame", Pro First Frame ON (~8 credits): clean seams.
+- Whole moves made fresh (a punch, a roundhouse): Turbo / Pro with the outfit lock - these came out clean and usable.
+- Ultra: expressive but melts faces on fast frames and slims her build; it can't force a last frame (no clean loops).
+- "Pick the frames yourself" (in-betweening OUR two key poses) is weak: it redraws both ends in its own style and spends
+  most of the clip holding them - about one usable in-between frame. Draw key poses in ChatGPT instead.
+- Sheet settings: 25 frames, 512 px, Sharpen None (the packer sharpens), Compression OFF. Generating fresh beats Edit.
+- Its frames mix fine with ChatGPT frames at game size (style close enough); the chest ran a little bigger than her art.
+
+### Clean-up tools (in notes/tools; copy them into the new project)
+- cellcut.py: cut a ChatGPT sheet into boxes (watershed, handles touching figures). mktpl.py: make the 6 / 10-box templates.
+- spriteclean.py: haze (ChatGPT noise-cloud backgrounds), edges (red / yellow halos), opaque (see-through figures),
+  green (key + despill a Seedance clip). checkercut.py: figures on a PAINTED checkerboard instead of transparency.
+- Scale check: besides each sheet's box 1, compare head and shoulder size across poses - ChatGPT sometimes draws box 1
+  right and every pose after it ~15% bigger (crouched poses still measure a normal height).
 
 ### Cutting and packing
 - Cut by watershed per grid cell (seed from eroded figure pixels, never let a seed span two cells, reassign stray
